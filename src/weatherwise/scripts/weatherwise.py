@@ -24,6 +24,7 @@ from ww_http import REPO, VERSION, HttpError, get_json  # noqa: E402
 from ww_places import resolve_place, with_timezone  # noqa: E402
 from ww_render import render_error, render_report  # noqa: E402
 from ww_sources import fetch_open_meteo, fetch_weatherkit  # noqa: E402
+from ww_setup import remove_weatherkit, set_default, set_lang, set_weatherkit, show  # noqa: E402
 
 VERSION_LINE = f"weatherwise {VERSION} · by SmallYuan · {REPO}"
 AUTH_FALLBACK = (
@@ -77,7 +78,38 @@ def run_weather(argv: list[str], http, now: datetime | None) -> str:
 
 
 def run_config(argv: list[str], http, now: datetime | None) -> str:
-    raise WwError("bad_arguments", "config commands are not available yet")
+    p = Parser(prog="weatherwise config")
+    sub = p.add_subparsers(dest="cmd", required=True)
+    sub.add_parser("show")
+    sd = sub.add_parser("set-default")
+    sd.add_argument("place")
+    sd.add_argument("--global", dest="global_search", action="store_true")
+    sl = sub.add_parser("set-lang")
+    sl.add_argument("lang")
+    wk = sub.add_parser("weatherkit")
+    wk.add_argument("--team-id")
+    wk.add_argument("--service-id")
+    wk.add_argument("--key-file")
+    wk.add_argument("--key-id")
+    wk.add_argument("--country-code", default="TW")
+    wk.add_argument("--remove", action="store_true")
+    a = p.parse_args(argv)
+
+    d = config_dir()
+    cfg = load_config(d)
+    if a.cmd == "show":
+        return show(cfg, d)
+    if a.cmd == "set-default":
+        return set_default(a.place, a.global_search, cfg, d, resolve_lang(None, cfg), http)
+    if a.cmd == "set-lang":
+        return set_lang(a.lang, cfg, d)
+    if a.remove:
+        return remove_weatherkit(cfg, d)
+    if not a.key_file:
+        raise WwError("invalid_key_file", "--key-file is required")
+    now_ts = int((now or datetime.now(timezone.utc)).timestamp())
+    return set_weatherkit(a.team_id, a.service_id, a.key_file, a.key_id, a.country_code,
+                          cfg, d, resolve_lang(None, cfg), http, now_ts)
 
 
 def main(argv: list[str] | None = None, *, http=get_json, now: datetime | None = None) -> int:
