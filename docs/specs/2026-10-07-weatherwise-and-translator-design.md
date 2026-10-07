@@ -247,7 +247,10 @@ uv run tools/translate.py --check   # dist/ 跟 src/ 不同步就回傳失敗（
 
 ## 測試
 
-- `tests/test_weatherwise.py`：用錄好的 JSON fixture（WeatherKit 和 Open-Meteo 各一份），不打網路，測試以下項目：
+- **真的 API 是主要的驗證方式**（`tests/test_live.py`）：Open-Meteo、Nominatim 直接打真的請求；這台電腦有 WeatherKit 金鑰時也打真的 WeatherKit。檢查回傳格式、時區、日期，以及假資料用到的欄位真的 API 都有。CI 沒有金鑰，所以會跳過 WeatherKit 的部分。
+- 假資料只用在真的 API 無法照需求產生的情況：401／403、500、null、警報。
+- 401 自動切換和完整的設定流程，最後由使用者實際撤銷金鑰、建立新金鑰來測一次（見發布順序）。
+- 各模組的單元測試涵蓋以下項目：
   - 兩種來源轉成相同格式的輸出，`local_time` 和日期依地點的時區計算。
   - 警報的三種狀態：`unsupported`、`none`、列出內容。
   - 401／403 時自動改用 Open-Meteo，並輸出 `notice`；其他 HTTP 錯誤不切換。
@@ -261,16 +264,17 @@ uv run tools/translate.py --check   # dist/ 跟 src/ 不同步就回傳失敗（
   - 寫入中途失敗時，原本的設定檔保持不變。
 - `tests/test_translate.py`：佔位符替換、只替換 `.md`、清空舊檔、殘留佔位符時報錯、`--check` 偵測不同步。
 - `tests/test_privacy.py`：上面說的 deny-list 掃描。
-- 一行指令跑全部：`uv run --with pytest pytest`。
-- GitHub Actions：跑測試加上 `translate.py --check`。
+- 一行指令跑全部：`uv run pytest`。
+- GitHub Actions：跑測試（包含真實 API）加上 `translate.py --check`。
 
 ## 發布順序
 
 1. 本機完成，測試全過。
 2. 手動實測：免費模式查一次台北和東京；用你現有的 WeatherKit 金鑰透過 `config weatherkit` 設定後再查一次。
 3. **讓飛予實際使用**：把 `dist/hermes/weatherwise` 裝進這台電腦的 `~/.hermes/skills/`。測試期間暫停 `macos-weather`，避免兩個 skill 搶著觸發。用真實的對話測試，例如「明天要帶傘嗎」「預設地點改成台中」「東京這週天氣」「颱風要來了嗎」，確認她讀輸出不會答錯。發現問題就回頭改輸出格式或 SKILL.md。
-4. 建立公開的 GitHub repo 並 push（推之前會先問你）。
-5. smallyuan.dev：卡片標籤從 `macos-weather` 改成 `weatherwise`，並連到 repo。這是首頁 repo 的另一個小改動。
+4. **撤銷金鑰實測**：使用者在 Apple 網站撤銷目前的金鑰，確認真的 401 會自動切換並告知使用者；再讓飛予帶使用者建立新金鑰、走完整個設定流程。撤銷會讓舊的 `macos-weather` 一起失效，要一併處理。
+5. 建立公開的 GitHub repo 並 push（推之前會先問你）。
+6. smallyuan.dev：卡片標籤從 `macos-weather` 改成 `weatherwise`，並連到 repo。這是首頁 repo 的另一個小改動。
 
 ## 待決定
 

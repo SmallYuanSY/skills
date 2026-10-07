@@ -4,7 +4,7 @@
 
 **Goal:** 做出公開 repo 的第一個 skill `weatherwise`（Open-Meteo 預設、WeatherKit 選配、輸出給模型讀），以及把一份原始檔轉成 Hermes／Claude Code 版本的轉譯器。
 
-**Architecture:** skill 的程式放在 `src/weatherwise/scripts/`，入口 `weatherwise.py` 是 uv inline script，其他模組放在同一資料夾，各管一件事：錯誤、HTTP、資料結構、輸出、地點、資料來源、設定檔、設定指令。所有網路呼叫都透過一個可注入的 `http(url, headers) -> JSON` 函式，測試時換成假的，不打網路。轉譯器 `tools/translate.py` 只用標準庫，把 `src/` 轉成 `dist/hermes/` 和 `dist/claude/`。
+**Architecture:** skill 的程式放在 `src/weatherwise/scripts/`，入口 `weatherwise.py` 是 uv inline script，其他模組放在同一資料夾，各管一件事：錯誤、HTTP、資料結構、輸出、地點、資料來源、設定檔、設定指令。所有網路呼叫都透過一個可注入的 `http(url, headers) -> JSON` 函式。真的 API 是主要的驗證方式（Task 10）；假資料只用在真的 API 無法照需求產生的情況（401／403、500、null、警報）。轉譯器 `tools/translate.py` 只用標準庫，把 `src/` 轉成 `dist/hermes/` 和 `dist/claude/`。
 
 **Tech Stack:** Python ≥ 3.10、uv、pytest、PyJWT[crypto]（WeatherKit 簽章）、GitHub Actions。
 
@@ -20,7 +20,7 @@
 - `--days` 預設 3，限制在 1 到 10。
 - 不讀出、不印出 `.p8` 的內容；不在輸出或 SKILL.md 裡提到作者（frontmatter、LICENSE、`--version`、User-Agent 除外）；不回傳任何資料。
 - repo 裡不能出現私人資訊。隱私 deny-list 只放在本機 `tests/private-terms.local.txt`（gitignore）。
-- 測試全部不打網路。指令：`uv run pytest`。
+- 測試會打真的 API（Open-Meteo、Nominatim；本機有金鑰時也包含 WeatherKit），標記為 `live`。Nominatim 每秒最多 1 次請求。指令：`uv run pytest`；離線時用 `uv run pytest -m 'not live'`。
 - push 和建立 GitHub repo 都要先問過使用者。這份計畫只到本機 commit 和實測為止。
 
 ## Review Focus
@@ -67,6 +67,7 @@ skills/
     ├── test_cli.py
     ├── test_setup.py
     ├── test_translate.py
+    ├── test_live.py                    真實 API
     ├── test_privacy.py
     └── private-terms.example.txt
 ```
@@ -2174,7 +2175,151 @@ git commit -m "chore: privacy check, README, and CI"
 
 ---
 
-### Task 10: 實測（手動，不 push）
+### Task 10: 真實 API 測試
+
+假資料只能證明「程式對假資料的處理是對的」。如果假資料本身跟真的 API 長得不一樣，前面的測試全部通過也沒用。這個 task 直接打真的 API，並確認 `conftest.py` 的假資料用到的每個欄位，真的 API 都有回傳。
+
+**Files:**
+- Create: `tests/test_live.py`
+- Modify: `pyproject.toml`（註冊 `live` marker）
+
+**Interfaces:**
+- Consumes: `fetch_open_meteo`、`fetch_weatherkit`、`geocode`、`with_timezone`、`get_json`、`weatherwise.main`、`conftest` 的 `OPEN_METEO`、`WEATHERKIT`、`config_dir`
+- 本機的 WeatherKit 設定：讀 `~/.config/weatherkit/config.json` 的 `team_id`、`key_id`、`service_id`、`key_path`。**只讀這四個欄位，不讀 `.p8` 的內容，也不印出任何 ID。** 沒有這個檔案的機器（例如 CI）會跳過 WeatherKit 的部分。
+
+- [ ] **Step 1: 在 `pyproject.toml` 的 `[tool.pytest.ini_options]` 加上 marker**
+
+```toml
+markers = ["live: real network requests (skip with -m 'not live')"]
+```
+
+- [ ] **Step 2: 寫 `tests/test_live.py`**
+
+```python
+"""Real requests: they catch what fixtures can't, such as the APIs' actual field names."""
+import json
+import time
+from datetime import datetime
+from pathlib import Path
+from zoneinfo import ZoneInfo
+
+import pytest
+
+import weatherwise
+from conftest import OPEN_METEO, WEATHERKIT
+from ww_http import get_json
+from ww_model import Place
+from ww_places import geocode, with_timezone
+from ww_sources import fetch_open_meteo, fetch_weatherkit
+
+pytestmark = pytest.mark.live
+
+TAIPEI = Place("台北市", 25.033, 121.565, "Asia/Taipei")
+LOCAL_WEATHERKIT = Path("~/.config/weatherkit/config.json").expanduser()
+WK_FIELDS = ("team_id", "key_id", "service_id", "key_path")
+
+
+def local_weatherkit() -> dict | None:
+    """The WeatherKit IDs already on this machine. Never reads the key itself."""
+    if not LOCAL_WEATHERKIT.exists():
+        return None
+    cfg = json.loads(LOCAL_WEATHERKIT.read_text())
+    if not all(cfg.get(k) for k in WK_FIELDS):
+        return None
+    return {k: cfg[k] for k in WK_FIELDS}
+
+
+needs_weatherkit = pytest.mark.skipif(local_weatherkit() is None, reason="no WeatherKit key on this machine")
+
+
+def taipei_today() -> str:
+    return datetime.now(ZoneInfo("Asia/Taipei")).date().isoformat()
+
+
+@pytest.fixture
+def polite():
+    """Nominatim allows one request per second."""
+    yield get_json
+    time.sleep(1.1)
+
+
+def test_open_meteo_returns_every_field_the_fixture_uses():
+    r = fetch_open_meteo(TAIPEI, 3, get_json)
+    assert set(OPEN_METEO["current"]) <= set(r.raw["current"])
+    assert set(OPEN_METEO["daily"]) <= set(r.raw["daily"])
+    assert r.raw["timezone"] == "Asia/Taipei"
+    assert len(r.days) == 3
+    assert r.days[0].date == taipei_today()
+    assert not r.current.condition.startswith("Unknown")
+
+
+def test_geocode_in_taiwan(polite):
+    place = geocode("板橋", "zh-TW", False, polite)
+    assert 24.9 < place.lat < 25.1 and 121.4 < place.lon < 121.55
+
+
+def test_geocode_abroad_with_timezone(polite):
+    place = with_timezone(geocode("Tokyo", "en", True, polite), get_json)
+    assert "Tokyo" in place.name
+    assert place.timezone == "Asia/Tokyo"
+
+
+def test_free_mode_end_to_end(config_dir, capsys, polite):
+    assert weatherwise.main(["config", "set-default", "台北"]) == 0
+    assert "timezone=Asia/Taipei" in capsys.readouterr().out
+    assert weatherwise.main([]) == 0
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[0] == "source: open-meteo"
+    assert lines[2].startswith(f"local_time: {taipei_today()}T")
+    assert lines[-1].startswith("alerts: unsupported")
+
+
+@needs_weatherkit
+def test_weatherkit_returns_every_field_the_fixture_uses():
+    r = fetch_weatherkit(TAIPEI, 3, "zh-TW", local_weatherkit(), get_json, int(time.time()))
+    assert set(WEATHERKIT["currentWeather"]) <= set(r.raw["currentWeather"])
+    assert set(WEATHERKIT["forecastDaily"]["days"][0]) <= set(r.raw["forecastDaily"]["days"][0])
+    assert r.days[0].date == taipei_today()
+    assert r.alerts is not None  # WeatherKit has alert data for Taiwan
+
+
+@needs_weatherkit
+def test_weatherkit_setup_end_to_end(config_dir, capsys):
+    wk = local_weatherkit()
+    assert weatherwise.main(["config", "set-default", "25.033,121.565"]) == 0
+    code = weatherwise.main(["config", "weatherkit", "--team-id", wk["team_id"], "--service-id", wk["service_id"],
+                             "--key-file", wk["key_path"], "--key-id", wk["key_id"]])
+    out = capsys.readouterr().out
+    assert code == 0, out
+    assert weatherwise.main(["config", "show"]) == 0
+    out = capsys.readouterr().out
+    assert "source: weatherkit" in out
+    assert wk["team_id"] not in out
+    assert weatherwise.main([]) == 0
+    assert capsys.readouterr().out.startswith("source: weatherkit")
+    assert weatherwise.main(["config", "weatherkit", "--remove"]) == 0
+```
+
+`config_dir` fixture 會把設定導向暫存資料夾，所以這些測試不會碰到你真正的 `~/.config/weatherwise/`。
+
+- [ ] **Step 3: 執行**
+
+Run: `uv run pytest tests/test_live.py -v`
+Expected: 6 passed。如果有任何一個「欄位」測試失敗，代表 `conftest.py` 的假資料跟真的 API 不一致：先修正假資料和解析程式，再重跑全部測試。
+
+Run: `uv run pytest`
+Expected: 全部通過
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add pyproject.toml tests/test_live.py
+git commit -m "test: live API checks against the real services"
+```
+
+---
+
+### Task 11: 實測（手動，不 push）
 
 **Files:** 不改 repo（發現問題時回到對應的 task 修正，並補上測試）
 
@@ -2188,21 +2333,10 @@ uv run $S config set-default 台北            # 預期 saved: default = ...
 uv run $S                                   # 預期 source: open-meteo、alerts: unsupported
 uv run $S Tokyo --global --lang en          # 預期 location 是英文的 Tokyo、timezone=Asia/Tokyo
 uv run $S --version
-```
-
-- [ ] **Step 2: WeatherKit 實測**
-
-用使用者現有的金鑰（`~/.config/weatherkit/`）。**只讀取 `config.json` 裡的 ID 欄位，不讀、不印 `.p8` 的內容。**
-
-```bash
-uv run $S config weatherkit --team-id <team_id> --service-id <service_id> --key-file <key_path>
-uv run $S config show                       # 預期 source: weatherkit，ID 被遮蔽
-uv run $S                                   # 預期 source: weatherkit、alerts: none 或有內容
-uv run $S config weatherkit --remove
 unset WEATHERWISE_CONFIG_DIR
 ```
 
-- [ ] **Step 3: 安裝到這台的 Hermes，讓飛予實際使用**
+- [ ] **Step 2: 安裝到這台的 Hermes，讓飛予改用 weatherwise**
 
 先跟使用者確認，再執行：
 
@@ -2212,10 +2346,25 @@ cp -R ~/Developer/skills/dist/hermes/weatherwise ~/.hermes/skills/
 
 暫停 `macos-weather`（具體做法依 Hermes 的 skill 停用方式，執行前先查清楚並跟使用者確認）。
 
+請使用者跟飛予說「把預設地點設好」「幫我設定 WeatherKit」，讓飛予用**現有的金鑰**透過 `config` 指令完成設定，寫進真正的 `~/.config/weatherwise/`。
+
+- [ ] **Step 3: 一般對話測試**
+
 請使用者用真實對話測試：「明天要帶傘嗎」「預設地點改成台中」「東京這週天氣」「颱風要來了嗎」。確認：日期對得上 `local_time`、不會把 `alerts: unsupported` 說成沒有警報、`set-default` 之後有跟使用者確認地點。
 
-發現答錯 → 修改輸出格式或 SKILL.md → 補測試 → `uv run tools/translate.py` → 重新複製到 Hermes → 再測。
+- [ ] **Step 4: 撤銷金鑰，測試真的 401 和整個設定流程**
 
-- [ ] **Step 4: 回報**
+先提醒使用者：撤銷之後，`macos-weather` 用的舊設定（`~/.config/weatherkit/`）也會失效，測完要一併處理。
+
+1. 使用者在 Apple Developer 網站撤銷（Revoke）目前的金鑰。
+2. 問飛予天氣。預期：輸出第一行是 `notice: weatherkit_auth_failed (HTTP 401) ...`，天氣改用 Open-Meteo，飛予有把這件事告訴使用者。
+3. 使用者跟飛予說要重新設定。預期：飛予照 `references/weatherkit-setup.md` 一步一步帶使用者建立新金鑰、下載 `.p8`，最後執行 `config weatherkit`，並且沒有讀出或貼出 `.p8` 的內容。
+4. 再問一次天氣。預期：`source: weatherkit`，沒有 `notice`。
+5. 舊的 `macos-weather`：問使用者要直接移除，還是把 `~/.config/weatherkit/` 也換成新金鑰。
+6. Task 10 的 WeatherKit 測試讀的是 `~/.config/weatherkit/config.json`。如果使用者選擇移除舊設定，就把 `local_weatherkit()` 改成讀 `~/.config/weatherwise/config.json` 的 `weatherkit` 區塊，再跑一次 `uv run pytest tests/test_live.py`。
+
+發現答錯或流程卡住 → 修改輸出格式、SKILL.md 或教學 → 補測試 → `uv run tools/translate.py` → 重新複製到 Hermes → 再測。
+
+- [ ] **Step 5: 回報**
 
 整理實測結果給使用者，詢問是否要建立 GitHub repo 並 push。這份計畫到此結束。
