@@ -1,7 +1,7 @@
 # weatherwise 與 skill 轉譯器：設計
 
 日期：2026-10-07
-狀態：草稿，待確認
+狀態：已確認
 
 ## 目標
 
@@ -261,10 +261,10 @@ uv run tools/translate.py --check   # dist/ 跟 src/ 不同步就回傳失敗（
 
 1. 本機完成，測試全過。
 2. 手動實測：免費模式查一次台北和東京；用你現有的 WeatherKit 金鑰透過 `config weatherkit` 設定後再查一次。
-3. **讓飛予實際使用**：把 `dist/hermes/weatherwise` 裝進她的 Hermes。測試期間暫停 `macos-weather`，避免兩個 skill 搶著觸發。用真實的對話測試，例如「明天要帶傘嗎」「預設地點改成台中」「東京這週天氣」「颱風要來了嗎」，確認她讀輸出不會答錯。發現問題就回頭改輸出格式或 SKILL.md。
+3. **讓飛予實際使用**：把 `dist/hermes/weatherwise` 裝進這台電腦的 `~/.hermes/skills/`。測試期間暫停 `macos-weather`，避免兩個 skill 搶著觸發。用真實的對話測試，例如「明天要帶傘嗎」「預設地點改成台中」「東京這週天氣」「颱風要來了嗎」，確認她讀輸出不會答錯。發現問題就回頭改輸出格式或 SKILL.md。
 4. 建立公開的 GitHub repo 並 push（推之前會先問你）。
 5. smallyuan.dev：卡片標籤從 `macos-weather` 改成 `weatherwise`，並連到 repo。這是首頁 repo 的另一個小改動。
 
 ## 待決定
 
-- 你自己 Hermes 裡的 `macos-weather` 要不要換成 `dist/hermes/weatherwise`。不影響這次的實作，可以發布後再決定。
+- 測試結束後，`macos-weather` 要不要直接換成 `weatherwise`。不影響這次的實作，可以發布後再決定。
