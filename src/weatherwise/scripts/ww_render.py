@@ -27,15 +27,17 @@ def render_report(report: Report, place: Place, now: datetime, notice: str | Non
     c = report.current
     if c:
         lines.append(
-            f"current: {c.condition}, {c.temperature:.1f}°C, feels {c.feels_like:.1f}°C, "
-            f"humidity {c.humidity:.0f}%, wind {c.wind_kmh:.0f} km/h, UV {_or_unknown(c.uv, '.0f')}"
+            f"current: {c.condition}, {_or_unknown(c.temperature, '.1f', '°C')}, "
+            f"feels {_or_unknown(c.feels_like, '.1f', '°C')}, humidity {_or_unknown(c.humidity, '.0f', '%')}, "
+            f"wind {_or_unknown(c.wind_kmh, '.0f', ' km/h')}, UV {_or_unknown(c.uv, '.0f')}"
         )
     if report.days:
         lines.append("daily:")
         for d in report.days:
             weekday = WEEKDAYS[date.fromisoformat(d.date).weekday()]
             lines.append(
-                f"  {d.date} {weekday}: {d.condition}, {d.temp_min:.0f}–{d.temp_max:.0f}°C, "
+                f"  {d.date} {weekday}: {d.condition}, "
+                f"{_or_unknown(d.temp_min, '.0f')}–{_or_unknown(d.temp_max, '.0f')}°C, "
                 f"precipitation chance {_or_unknown(d.precip_chance, '.0f', '%')}"
             )
     if report.alerts is None:

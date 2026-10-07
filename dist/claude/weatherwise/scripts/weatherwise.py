@@ -122,6 +122,9 @@ def main(argv: list[str] | None = None, *, http=get_json, now: datetime | None =
     except WwError as e:
         print(render_error(e))
         return 1
+    except Exception as e:  # never show the model a traceback, or an exception message that might hold file contents
+        print(render_error(WwError("internal_error", type(e).__name__)))
+        return 1
     print(out)
     return 0
 

@@ -4,11 +4,19 @@ import urllib.parse
 from dataclasses import replace
 
 from ww_errors import WwError
+from ww_http import HttpError
 from ww_model import Place
 
 NOMINATIM = "https://nominatim.openstreetmap.org/search"
 OPEN_METEO = "https://api.open-meteo.com/v1/forecast"
 COORDS = re.compile(r"^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$")
+
+
+def _get(http, url: str, service: str):
+    try:
+        return http(url)
+    except HttpError as e:  # e.g. Nominatim rate-limiting with 429
+        raise WwError("service_error", f"{service} HTTP {e.status}") from None
 
 
 def resolve_place(query: str | None, cfg: dict, lang: str, global_search: bool, http) -> Place:
@@ -31,7 +39,7 @@ def geocode(query: str, lang: str, global_search: bool, http) -> Place:
     # Taiwan first, then worldwide; --global goes straight to worldwide
     attempts = [base] if global_search else [{**base, "countrycodes": "tw"}, base]
     for params in attempts:
-        res = http(f"{NOMINATIM}?{urllib.parse.urlencode(params)}")
+        res = _get(http, f"{NOMINATIM}?{urllib.parse.urlencode(params)}", "nominatim")
         if res:
             r = res[0]
             parts = [p.strip() for p in r["display_name"].split(",")]
@@ -46,4 +54,4 @@ def with_timezone(place: Place, http) -> Place:
     q = urllib.parse.urlencode(
         {"latitude": place.lat, "longitude": place.lon, "timezone": "auto", "forecast_days": 1}
     )
-    return replace(place, timezone=http(f"{OPEN_METEO}?{q}").get("timezone") or "UTC")
+    return replace(place, timezone=_get(http, f"{OPEN_METEO}?{q}", "open-meteo").get("timezone") or "UTC")

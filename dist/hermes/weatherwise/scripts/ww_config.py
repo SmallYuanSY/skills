@@ -4,6 +4,7 @@ import os
 import re
 import tempfile
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from ww_errors import WwError
 
@@ -21,9 +22,40 @@ def load_config(d: Path) -> dict:
     if not path.exists():
         return {}
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, UnicodeDecodeError):
+        cfg = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):  # unreadable, not UTF-8, or not JSON
         raise WwError("config_invalid", str(path)) from None
+    problem = _shape_problem(cfg)
+    if problem:
+        raise WwError("config_invalid", f"{path}: {problem}")
+    return cfg
+
+
+def _shape_problem(cfg) -> str | None:
+    """Catch hand-edited values here, so nothing downstream crashes on them."""
+    if not isinstance(cfg, dict):
+        return "not a JSON object"
+    if "lang" in cfg and not isinstance(cfg["lang"], str):
+        return "lang must be a string"
+    if "weatherkit" in cfg and not isinstance(cfg["weatherkit"], dict):
+        return "weatherkit must be an object"
+    d = cfg.get("default")
+    if d is None:
+        return None
+    if not isinstance(d, dict):
+        return "default must be an object"
+    if not isinstance(d.get("name"), str) or not d["name"]:
+        return "default.name is missing"
+    for key, limit in (("lat", 90), ("lon", 180)):
+        v = d.get(key)
+        if isinstance(v, bool) or not isinstance(v, (int, float)) or not -limit <= v <= limit:
+            return f"default.{key} must be a number between -{limit} and {limit}"
+    if d.get("timezone") is not None:
+        try:
+            ZoneInfo(d["timezone"])
+        except (KeyError, ValueError, TypeError):  # ZoneInfoNotFoundError is a KeyError
+            return "default.timezone is not a valid time zone"
+    return None
 
 
 def save_config(d: Path, cfg: dict) -> None:

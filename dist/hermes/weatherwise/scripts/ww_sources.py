@@ -29,6 +29,13 @@ def fetch_open_meteo(place: Place, days: int, http) -> Report:
 
 
 def parse_open_meteo(data: dict) -> Report:
+    try:
+        return _parse_open_meteo(data)
+    except (KeyError, TypeError, ValueError, AttributeError):
+        raise WwError("service_error", "unexpected open-meteo response") from None
+
+
+def _parse_open_meteo(data: dict) -> Report:
     c = data.get("current")
     current = Current(
         wmo_condition(c["weather_code"]), c["temperature_2m"], c["apparent_temperature"],
@@ -76,6 +83,13 @@ def fetch_weatherkit(place: Place, days: int, lang: str, wk: dict, http, now_ts:
 
 
 def parse_weatherkit(data: dict, tz: str, days: int, alerts_available: bool) -> Report:
+    try:
+        return _parse_weatherkit(data, tz, days, alerts_available)
+    except (KeyError, TypeError, ValueError, AttributeError):
+        raise WwError("service_error", "unexpected weatherkit response") from None
+
+
+def _parse_weatherkit(data: dict, tz: str, days: int, alerts_available: bool) -> Report:
     c = data.get("currentWeather")
     current = Current(
         weatherkit_condition(c["conditionCode"]), c["temperature"], c["temperatureApparent"],
