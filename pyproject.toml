@@ -13,3 +13,4 @@ package = false
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src/weatherwise/scripts", "tools"]
+markers = ["live: real network requests (skip with -m 'not live')"]
