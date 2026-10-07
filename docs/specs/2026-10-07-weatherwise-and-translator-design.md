@@ -17,6 +17,7 @@
 **不做的事**
 
 - 不支援 Codex 或其他 agent。之後只要在轉譯器加一種輸出即可。
+- 第一版不做繁體中文以外的輸出語言，但架構預留 i18n。
 - 免費模式不提供天氣警報。
 - 不做任何防複製機制：不混淆程式碼、不在回答中提及作者、不回傳任何資料。
 
@@ -25,7 +26,7 @@
 ```
 skills/
 ├── LICENSE                     MIT，Copyright (c) 2026 SmallYuan
-├── README.md                   英文為主：有哪些 skill、怎麼安裝到 Hermes 或 Claude Code
+├── README.md                   英文：有哪些 skill、怎麼安裝到 Hermes 或 Claude Code
 ├── src/                        ← 唯一要手動編輯的地方
 │   └── weatherwise/
 │       ├── SKILL.md            路徑寫成佔位符 {{SKILL_DIR}}
@@ -92,7 +93,18 @@ weatherwise [地點] [--global] [--days N] [--json] [--version]
 - 免費模式：一律印出最後那行 `ℹ️`。用 ℹ️ 而不是 ⚠️，避免 agent 誤以為真的有警報。
 - `--json`：原樣輸出資料來源的 JSON，另外加上 `"source": "open-meteo"` 或 `"weatherkit"`。
 - `--version`：印出 `weatherwise 1.0.0 · by SmallYuan · https://github.com/SmallYuanSY/skills`。
-- 輸出語言第一版只有繁體中文，跟現有的 skill 相同。
+- 輸出語言第一版只有繁體中文，但架構預留 i18n，見下一節。
+
+### i18n（第一版只有 `zh-TW`，架構先預留）
+
+- **所有使用者看得到的文字集中在一個語言表**：`MESSAGES = {"zh-TW": {...}}`。輸出的每一行、錯誤訊息、兩張天氣狀況對照表、星期幾都從這裡取，程式其他地方不寫死任何中文。
+- **語言設定**：設定檔加上 `"lang": "zh-TW"`，CLI 加上 `--lang`，優先順序是 CLI → 設定檔 → `zh-TW`。指定了表裡沒有的語言時，直接報錯並列出支援的語言，不會默默退回中文。
+- **對外 API 也跟著語言走**：WeatherKit 網址裡的語言代碼、Nominatim 的 `accept-language`，都從目前的語言設定帶入，不寫死 `zh-TW`。
+- **日期不用系統的 locale**：`%a` 會跟著系統語言變，所以星期幾改由語言表提供，輸出才不會因為機器設定不同而改變。
+- **測試**：測試裡臨時加一個假語言，所有 key 都填成 `<key>`，確認輸出的每個字都來自語言表，沒有遺漏的寫死文字；另外檢查每個語言的 key 都跟 `zh-TW` 一致。
+- **之後要加英文時**：在語言表加 `"en"`。SKILL.md 和教學的英文版，由轉譯器依語言產生（例如 `src/weatherwise/SKILL.en.md`），這部分第一版不做。
+
+README 是英文，內容只寫安裝方式，並註明「目前輸出為繁體中文」。
 
 ### 錯誤訊息
 
