@@ -1,0 +1,5 @@
+# One private term per line (case-insensitive). Copy to private-terms.local.txt,
+# which is gitignored, and fill in the real terms: home area, family names,
+# device or entity IDs, anything that must never be published.
+# Lines starting with # are ignored.
+example-private-term
