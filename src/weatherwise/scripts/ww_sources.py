@@ -10,6 +10,9 @@ from ww_model import Current, Day, Place, Report, weatherkit_condition, wmo_cond
 
 OPEN_METEO = "https://api.open-meteo.com/v1/forecast"
 WEATHERKIT = "https://weatherkit.apple.com/api/v1/weather"
+# Which data sets Apple has for a place. Alerts only exist in some countries
+# (not Taiwan or Japan as of 2026-10), so ask before treating "no alerts" as "none".
+WEATHERKIT_AVAILABILITY = "https://weatherkit.apple.com/api/v1/availability"
 
 
 def fetch_open_meteo(place: Place, days: int, http) -> Report:
@@ -58,16 +61,21 @@ def make_token(wk: dict, now_ts: int) -> str:
 
 
 def fetch_weatherkit(place: Place, days: int, lang: str, wk: dict, http, now_ts: int) -> Report:
-    token = make_token(wk, now_ts)
+    headers = {"Authorization": f"Bearer {make_token(wk, now_ts)}"}
+    country = wk.get("country_code", "TW")
+    available = http(
+        f"{WEATHERKIT_AVAILABILITY}/{place.lat}/{place.lon}?{urllib.parse.urlencode({'country': country})}", headers
+    )
+    alerts_available = "weatherAlerts" in available
+    data_sets = ["currentWeather", "forecastDaily"] + (["weatherAlerts"] if alerts_available else [])
     q = urllib.parse.urlencode({
-        "dataSets": "currentWeather,forecastDaily,weatherAlerts",
-        "timezone": place.timezone, "countryCode": wk.get("country_code", "TW"),
+        "dataSets": ",".join(data_sets), "timezone": place.timezone, "countryCode": country,
     })
-    data = http(f"{WEATHERKIT}/{lang}/{place.lat}/{place.lon}?{q}", {"Authorization": f"Bearer {token}"})
-    return parse_weatherkit(data, place.timezone, days)
+    data = http(f"{WEATHERKIT}/{lang}/{place.lat}/{place.lon}?{q}", headers)
+    return parse_weatherkit(data, place.timezone, days, alerts_available)
 
 
-def parse_weatherkit(data: dict, tz: str, days: int) -> Report:
+def parse_weatherkit(data: dict, tz: str, days: int, alerts_available: bool) -> Report:
     c = data.get("currentWeather")
     current = Current(
         weatherkit_condition(c["conditionCode"]), c["temperature"], c["temperatureApparent"],
@@ -83,9 +91,9 @@ def parse_weatherkit(data: dict, tz: str, days: int) -> Report:
             d["temperatureMin"], d["temperatureMax"], None if chance is None else chance * 100,
         ))
     alerts = None
-    if "weatherAlerts" in data:
+    if alerts_available:  # Apple omits weatherAlerts from the response when none are active
         alerts = [
             f"{a.get('description', '')} ({a.get('source', '')})"
-            for a in (data["weatherAlerts"] or {}).get("alerts", [])
+            for a in (data.get("weatherAlerts") or {}).get("alerts", [])
         ]
     return Report("weatherkit", current, out, alerts, data)

@@ -42,6 +42,11 @@ WEATHERKIT = {
     "weatherAlerts": {"alerts": []},
 }
 
+# WeatherKit's availability endpoint: which data sets Apple has for a place.
+# Real responses (2026-10-07): Taiwan and Japan have no weatherAlerts; the US does.
+WK_AVAILABLE_NO_ALERTS = ["currentWeather", "forecastDaily", "forecastHourly"]
+WK_AVAILABLE_WITH_ALERTS = ["currentWeather", "forecastDaily", "forecastHourly", "weatherAlerts"]
+
 
 class FakeHttp:
     """Routes a URL to the first response whose prefix matches. A response may be data,

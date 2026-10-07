@@ -1,7 +1,7 @@
 import os
 import stat
 
-from conftest import NOW, TAIPEI_DEFAULT, WEATHERKIT, FakeHttp
+from conftest import NOW, TAIPEI_DEFAULT, WEATHERKIT, WK_AVAILABLE_NO_ALERTS, FakeHttp
 from ww_config import load_config, save_config
 from ww_http import HttpError
 import weatherwise
@@ -9,6 +9,7 @@ import weatherwise
 NOMINATIM = "https://nominatim.openstreetmap.org/"
 OM = "https://api.open-meteo.com/"
 WK = "https://weatherkit.apple.com/"
+WK_AVAIL = "https://weatherkit.apple.com/api/v1/availability"
 TAICHUNG = [{"display_name": "臺中市, 臺灣", "lat": "24.1477", "lon": "120.6736"}]
 
 
@@ -55,7 +56,7 @@ def test_set_lang(config_dir, capsys):
 
 def test_weatherkit_copies_the_key_and_tests_it(config_dir, p8_key, capsys):
     save_config(config_dir, {"default": TAIPEI_DEFAULT})
-    http = FakeHttp({WK: WEATHERKIT})
+    http = FakeHttp({WK_AVAIL: WK_AVAILABLE_NO_ALERTS, WK: WEATHERKIT})
     code, out = run(wk_args(p8_key), http, capsys)
     assert code == 0
     assert out == "saved: weatherkit (test request succeeded)\nsource: weatherkit"
@@ -65,7 +66,7 @@ def test_weatherkit_copies_the_key_and_tests_it(config_dir, p8_key, capsys):
     wk = load_config(config_dir)["weatherkit"]
     assert wk == {"team_id": "TEAM123456", "key_id": "ABC123DEF4", "service_id": "dev.example.weather",
                   "key_path": str(copy), "country_code": "TW"}
-    assert len(http.calls) == 1  # exactly one test request
+    assert len(http.calls) == 2  # availability + one weather request, nothing more
 
 
 def test_weatherkit_rejected_key_saves_nothing(config_dir, p8_key, capsys):
@@ -92,7 +93,7 @@ def test_weatherkit_missing_file(config_dir, tmp_path, capsys):
 
 def test_show_masks_ids_and_never_prints_the_key(config_dir, p8_key, capsys):
     save_config(config_dir, {"default": TAIPEI_DEFAULT})
-    run(wk_args(p8_key), FakeHttp({WK: WEATHERKIT}), capsys)
+    run(wk_args(p8_key), FakeHttp({WK_AVAIL: WK_AVAILABLE_NO_ALERTS, WK: WEATHERKIT}), capsys)
     _, out = run(["show"], FakeHttp({}), capsys)
     assert "source: weatherkit" in out
     assert "TE…56" in out and "TEAM123456" not in out
@@ -101,7 +102,7 @@ def test_show_masks_ids_and_never_prints_the_key(config_dir, p8_key, capsys):
 
 def test_remove_weatherkit(config_dir, p8_key, capsys):
     save_config(config_dir, {"default": TAIPEI_DEFAULT})
-    run(wk_args(p8_key), FakeHttp({WK: WEATHERKIT}), capsys)
+    run(wk_args(p8_key), FakeHttp({WK_AVAIL: WK_AVAILABLE_NO_ALERTS, WK: WEATHERKIT}), capsys)
     code, out = run(["weatherkit", "--remove"], FakeHttp({}), capsys)
     assert (code, out) == (0, "removed: weatherkit\nsource: open-meteo")
     assert "weatherkit" not in load_config(config_dir)

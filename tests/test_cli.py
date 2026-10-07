@@ -1,13 +1,14 @@
 import json
 import shutil
 
-from conftest import NOW, OPEN_METEO, TAIPEI_DEFAULT, WEATHERKIT, FakeHttp
+from conftest import NOW, OPEN_METEO, TAIPEI_DEFAULT, WEATHERKIT, WK_AVAILABLE_WITH_ALERTS, FakeHttp
 from ww_config import save_config
 from ww_http import HttpError
 import weatherwise
 
 OM = "https://api.open-meteo.com/"
 WK = "https://weatherkit.apple.com/"
+WK_AVAIL = "https://weatherkit.apple.com/api/v1/availability"
 
 
 def run(argv, http, capsys):
@@ -44,7 +45,7 @@ def test_no_config_and_no_place_asks_where(config_dir, capsys):
 
 def test_weatherkit_mode(config_dir, p8_key, capsys):
     use_weatherkit(config_dir, p8_key)
-    code, out = run([], FakeHttp({WK: WEATHERKIT}), capsys)
+    code, out = run([], FakeHttp({WK_AVAIL: WK_AVAILABLE_WITH_ALERTS, WK: WEATHERKIT}), capsys)
     assert code == 0
     assert out.splitlines()[0] == "source: weatherkit"
     assert out.splitlines()[-1] == "alerts: none"
@@ -54,7 +55,7 @@ def test_both_sources_give_the_same_weather_lines(config_dir, p8_key, capsys):
     save_config(config_dir, {"default": TAIPEI_DEFAULT})
     _, free = run(["--days", "2"], FakeHttp({OM: OPEN_METEO}), capsys)
     use_weatherkit(config_dir, p8_key)
-    _, paid = run(["--days", "2"], FakeHttp({WK: WEATHERKIT}), capsys)
+    _, paid = run(["--days", "2"], FakeHttp({WK_AVAIL: WK_AVAILABLE_WITH_ALERTS, WK: WEATHERKIT}), capsys)
     assert free.splitlines()[1:-1] == paid.splitlines()[1:-1]
 
 

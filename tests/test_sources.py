@@ -1,11 +1,12 @@
 import jwt
 import pytest
 
-from conftest import OPEN_METEO, WEATHERKIT, FakeHttp
+from conftest import OPEN_METEO, WEATHERKIT, WK_AVAILABLE_NO_ALERTS, WK_AVAILABLE_WITH_ALERTS, FakeHttp
 from ww_errors import WwError
 from ww_http import HttpError
 from ww_model import Current, Day, Place
 from ww_sources import WEATHERKIT as WEATHERKIT_URL
+from ww_sources import WEATHERKIT_AVAILABILITY
 from ww_sources import fetch_open_meteo, fetch_weatherkit, parse_open_meteo, parse_weatherkit
 
 TAIPEI = Place("台北市", 25.033, 121.565, "Asia/Taipei")
@@ -43,7 +44,7 @@ def test_open_meteo_http_error_is_a_service_error():
 
 
 def test_weatherkit_matches_open_meteo_and_uses_local_dates():
-    r = parse_weatherkit(WEATHERKIT, "Asia/Taipei", 10)
+    r = parse_weatherkit(WEATHERKIT, "Asia/Taipei", 10, alerts_available=True)
     assert r.source == "weatherkit"
     assert r.current.condition == "Partly Cloudy"
     assert round(r.current.humidity) == 70
@@ -55,22 +56,29 @@ def test_weatherkit_matches_open_meteo_and_uses_local_dates():
 
 def test_weatherkit_limits_days_and_lists_alerts():
     data = {**WEATHERKIT, "weatherAlerts": {"alerts": [{"description": "Heavy Rain Advisory", "source": "CWA"}]}}
-    r = parse_weatherkit(data, "Asia/Taipei", 1)
+    r = parse_weatherkit(data, "Asia/Taipei", 1, alerts_available=True)
     assert len(r.days) == 1
     assert r.alerts == ["Heavy Rain Advisory (CWA)"]
 
 
-def test_weatherkit_without_alert_data_is_unsupported():
+def test_weatherkit_where_apple_has_no_alerts_is_unsupported():
+    assert parse_weatherkit(WEATHERKIT, "Asia/Taipei", 10, alerts_available=False).alerts is None
+
+
+def test_weatherkit_with_no_active_alerts_is_none():
+    # Apple leaves weatherAlerts out of the response when nothing is active
     data = {k: v for k, v in WEATHERKIT.items() if k != "weatherAlerts"}
-    assert parse_weatherkit(data, "Asia/Taipei", 10).alerts is None
+    assert parse_weatherkit(data, "Asia/Taipei", 10, alerts_available=True).alerts == []
 
 
 def test_weatherkit_request_is_signed(p8_key):
     wk = {"team_id": "TEAM123456", "key_id": "ABC123DEF4", "service_id": "dev.example.weather",
           "key_path": str(p8_key), "country_code": "TW"}
-    http = FakeHttp({WEATHERKIT_URL: WEATHERKIT})
+    http = FakeHttp({WEATHERKIT_AVAILABILITY: WK_AVAILABLE_WITH_ALERTS, WEATHERKIT_URL: WEATHERKIT})
     fetch_weatherkit(TAIPEI, 3, "en", wk, http, 1_791_000_000)
-    url, headers = http.calls[0]
+    assert http.calls[0][0] == f"{WEATHERKIT_AVAILABILITY}/25.033/121.565?country=TW"
+    url, headers = http.calls[1]
+    assert "weatherAlerts" in url
     assert url.startswith(f"{WEATHERKIT_URL}/en/25.033/121.565?")
     token = headers["Authorization"].removeprefix("Bearer ")
     assert jwt.get_unverified_header(token)["kid"] == "ABC123DEF4"
@@ -81,7 +89,15 @@ def test_weatherkit_request_is_signed(p8_key):
 def test_weatherkit_http_errors_are_left_to_the_caller(p8_key):
     wk = {"team_id": "T", "key_id": "K", "service_id": "S", "key_path": str(p8_key)}
     with pytest.raises(HttpError):
-        fetch_weatherkit(TAIPEI, 3, "en", wk, FakeHttp({WEATHERKIT_URL: HttpError(401)}), 0)
+        fetch_weatherkit(TAIPEI, 3, "en", wk, FakeHttp({"https://weatherkit.apple.com/": HttpError(401)}), 0)
+
+
+def test_weatherkit_skips_alerts_where_apple_has_none(p8_key):
+    wk = {"team_id": "T", "key_id": "K", "service_id": "S", "key_path": str(p8_key), "country_code": "TW"}
+    http = FakeHttp({WEATHERKIT_AVAILABILITY: WK_AVAILABLE_NO_ALERTS, WEATHERKIT_URL: WEATHERKIT})
+    r = fetch_weatherkit(TAIPEI, 3, "en", wk, http, 0)
+    assert "weatherAlerts" not in http.calls[1][0]
+    assert r.alerts is None
 
 
 def test_unreadable_key_is_an_invalid_key_file(tmp_path):
