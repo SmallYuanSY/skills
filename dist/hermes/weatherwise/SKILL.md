@@ -1,6 +1,6 @@
 ---
 name: weatherwise
-description: Current weather, multi-day forecast, and rain chance for the user's location or any place, plus official alerts when WeatherKit is set up. Use when the user asks about weather, temperature, rain, an umbrella, typhoons, or what to wear. 天氣、氣溫、會不會下雨、要不要帶傘、颱風、明天／這週天氣、出門前看天氣。
+description: Current weather, multi-day forecast, and rain chance for the user's location or any place, plus official alerts where Apple WeatherKit has them (if set up). Use when the user asks about weather, temperature, rain, an umbrella, typhoons, or what to wear. 天氣、氣溫、會不會下雨、要不要帶傘、颱風、明天／這週天氣、出門前看天氣。
 version: 1.0.0
 author: SmallYuan
 license: MIT

@@ -4,7 +4,7 @@ Agent skills by [SmallYuan](https://smallyuan.dev), ready to drop into [Hermes](
 
 | Skill | What it does |
 |---|---|
-| [weatherwise](src/weatherwise/SKILL.md) | Weather, forecast, and rain chance for any place. Free by default (Open-Meteo); Apple WeatherKit optional for official alerts. |
+| [weatherwise](src/weatherwise/SKILL.md) | Weather, forecast, and rain chance for any place. Free by default (Open-Meteo); Apple WeatherKit optional, which adds official alerts in countries where Apple has them (e.g. the US, not Taiwan or Japan). |
 
 ## Install
 
