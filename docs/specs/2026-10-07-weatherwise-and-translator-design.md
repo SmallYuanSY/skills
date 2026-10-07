@@ -58,8 +58,8 @@ skills/
 
 | 模式 | 什麼時候用 | 警報 |
 |---|---|---|
-| Open-Meteo（預設） | 設定檔沒有 `weatherkit` 區塊，或根本沒有設定檔 | `unsupported` |
-| WeatherKit（選配） | 設定檔有完整的 `weatherkit` 區塊 | `none` 或列出內容 |
+| Open-Meteo（預設） | 設定檔沒有 `weatherkit` 區塊，或根本沒有設定檔 | 一律 `unsupported` |
+| WeatherKit（選配） | 設定檔有完整的 `weatherkit` 區塊 | `none` 或列出內容；回應裡沒有警報資料（部分地區）時是 `unsupported` |
 
 兩個來源各寫一個函式，回傳同一種結構（目前天氣、每日預報、警報狀態），再由同一段程式輸出，所以兩種模式的輸出格式完全相同。天氣狀況統一成英文名稱：WeatherKit 的 `conditionCode` 轉成可讀的英文（例如 `PartlyCloudy` → `Partly Cloudy`），Open-Meteo 的 WMO 代碼對照到同一組英文名稱。
 
@@ -80,7 +80,7 @@ local_time: 2026-10-07T20:41 Wed
 current: Partly Cloudy, 27.0°C, feels 29.1°C, humidity 70%, wind 12 km/h, UV 6
 daily:
   2026-10-08 Thu: Rain, 23–27°C, precipitation chance 80%
-alerts: unsupported (free mode has no official alerts; do not tell the user there are none)
+alerts: unsupported (this source has no official alert data here; do not tell the user there are none)
 ```
 
 WeatherKit 模式的警報：
@@ -100,7 +100,8 @@ alerts:
 notice: weatherkit_auth_failed (HTTP 401), fell back to open-meteo; tell the user their WeatherKit key may be revoked or their Apple Developer membership may have expired
 ```
 
-- `--json`：原樣輸出資料來源的 JSON，另外加上 `"source"` 欄位。
+- `--days`：預設 3，超出範圍時自動限制在 1 到 10 之間。
+- `--json`：輸出 `{"source": ..., "notice": ...（有才出現）, "data": <資料來源原始 JSON>}`。
 - `--version`：印出 `weatherwise 1.0.0 · by SmallYuan · https://github.com/SmallYuanSY/skills`。
 
 ### 錯誤
@@ -119,7 +120,12 @@ action: ask the user where they are, then run: config set-default <place>
 | `network_error` | 連不上 | 照實告訴使用者查不到 |
 | `weatherkit_config_incomplete` | 設定缺欄位（訊息會列出缺哪些） | 執行 `config weatherkit` 補齊，或用 `--remove` 改回免費模式 |
 | `weatherkit_key_missing` | `.p8` 檔不見了 | 同上 |
-| `unsupported_lang` | `lang` 不是支援的值 | 列出支援的值 |
+| `unsupported_lang` | `lang` 不是 BCP 47 格式 | 改用 `zh-TW`、`en`、`ja` 這類格式 |
+| `config_invalid` | 設定檔不是合法的 JSON | 請使用者檢查或刪除設定檔，再用 `config` 指令重設 |
+| `service_error` | 天氣服務回傳 401／403 以外的 HTTP 錯誤 | 告訴使用者稍後再試 |
+| `weatherkit_auth_failed` | 只出現在 `config weatherkit`：測試請求被拒（401／403） | 告訴使用者 ID 或金鑰有誤，設定沒有寫入 |
+| `invalid_key_file` | `.p8` 檔不存在或不是有效的金鑰 | 跟使用者要正確的 `AuthKey_<KeyID>.p8` 路徑 |
+| `bad_arguments` | 指令參數錯誤 | 對照 SKILL.md 修正指令 |
 
 ### 語言（i18n）
 
@@ -175,6 +181,7 @@ weatherwise config weatherkit --remove
 
 ### SKILL.md
 
+- 內文用英文寫，因為讀者是模型；description 中英文都有，中文的問法才能觸發。
 - frontmatter：`name: weatherwise`、`author: SmallYuan`、`license: MIT`、repo 網址，以及中英文都有的 description。
 - 指令寫成 `uv run {{SKILL_DIR}}/scripts/weatherwise.py`。
 - 怎麼讀輸出、怎麼回答：
