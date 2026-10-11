@@ -47,11 +47,13 @@ uv run {{SKILL_DIR}}/scripts/weatherwise.py config show
 uv run {{SKILL_DIR}}/scripts/weatherwise.py config set-default <place> [--global]
 uv run {{SKILL_DIR}}/scripts/weatherwise.py config set-lang <lang>
 uv run {{SKILL_DIR}}/scripts/weatherwise.py config weatherkit --team-id <id> --service-id <id> --key-file <path to .p8>
+uv run {{SKILL_DIR}}/scripts/weatherwise.py config weatherkit --key-file <path to new .p8>   # new key, keeps the saved IDs
 uv run {{SKILL_DIR}}/scripts/weatherwise.py config weatherkit --remove
 ```
 
 - After `set-default`, tell the user the place that was saved and ask them to confirm it.
 - `lang` only sets the language of place names and alert text (a BCP 47 tag such as `zh-TW`, `en`, `ja`). It does not change the language you answer in.
 - WeatherKit is optional and needs a paid Apple Developer membership. If the user wants it, walk them through `{{SKILL_DIR}}/references/weatherkit-setup.md` one step at a time. Only the user can do the steps on Apple's website. The Key ID is read from the key's file name.
+- `config show` shortens IDs on purpose. Never fill in, guess, or retype an ID: take it from the user, or leave it out so the saved one is kept.
 - If the user would rather not paste their IDs into the chat, give them the full command to run in their own terminal (in Claude Code, they can type it after `!`).
 - Never open, print, or paste the contents of a `.p8` key file. Only ever handle its path.

@@ -59,6 +59,10 @@ def set_weatherkit(team_id, service_id, key_file, key_id, country_code, cfg, d, 
         raise WwError("invalid_key_file", str(src))
     m = KEY_FILE_NAME.match(src.name)
     key_id = key_id or (m[1] if m else None)
+    saved = cfg.get("weatherkit") or {}  # a new key keeps the IDs that already worked
+    kept = [n for n, v in (("team_id", team_id), ("service_id", service_id)) if not v and saved.get(n)]
+    team_id = team_id or saved.get("team_id")
+    service_id = service_id or saved.get("service_id")
     missing = [n for n, v in (("team_id", team_id), ("key_id", key_id), ("service_id", service_id)) if not v]
     if missing:
         hint = " (file is not named AuthKey_<KeyID>.p8; pass --key-id)" if "key_id" in missing else ""
@@ -73,7 +77,9 @@ def set_weatherkit(team_id, service_id, key_file, key_id, country_code, cfg, d, 
         fetch_weatherkit(place, 1, lang, wk, http, now_ts)
     except HttpError as e:
         if e.status in (401, 403):
-            raise WwError("weatherkit_auth_failed", f"HTTP {e.status}") from None
+            used = ", ".join(f"{n}={mask(wk[n])} {'from saved config' if n in kept else 'as given'}"
+                             for n in ("team_id", "service_id"))
+            raise WwError("weatherkit_auth_failed", f"HTTP {e.status}; {used}, key_id={key_id}") from None
         raise WwError("service_error", f"weatherkit HTTP {e.status}") from None
 
     d.mkdir(parents=True, exist_ok=True)
@@ -81,9 +87,13 @@ def set_weatherkit(team_id, service_id, key_file, key_id, country_code, cfg, d, 
     if src.resolve() != dest.resolve():
         shutil.copyfile(src, dest)
     os.chmod(dest, 0o600)
+    old_copy = Path(saved.get("key_path", "")).expanduser()
+    if saved.get("key_path") and old_copy.parent.resolve() == d.resolve() and old_copy.resolve() != dest.resolve():
+        old_copy.unlink(missing_ok=True)  # only our own copy of the replaced key
     cfg["weatherkit"] = {**wk, "key_path": str(dest)}
     save_config(d, cfg)
-    return "saved: weatherkit (test request succeeded)\nsource: weatherkit"
+    note = f"; kept the saved {' and '.join(kept)}" if kept else ""
+    return f"saved: weatherkit (test request succeeded{note})\nsource: weatherkit"
 
 
 def remove_weatherkit(cfg: dict, d: Path) -> str:

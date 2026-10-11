@@ -72,7 +72,7 @@ def test_weatherkit_copies_the_key_and_tests_it(config_dir, p8_key, capsys):
 def test_weatherkit_rejected_key_saves_nothing(config_dir, p8_key, capsys):
     code, out = run(wk_args(p8_key), FakeHttp({OM: {"timezone": "Asia/Taipei"}, WK: HttpError(403)}), capsys)
     assert code == 1
-    assert out.startswith("error: weatherkit_auth_failed (HTTP 403)")
+    assert out.startswith("error: weatherkit_auth_failed (HTTP 403; team_id=TE…56 as given")
     assert not (config_dir / "config.json").exists()
     assert not (config_dir / "AuthKey_ABC123DEF4.p8").exists()
 
@@ -108,3 +108,54 @@ def test_remove_weatherkit(config_dir, p8_key, capsys):
     assert "weatherkit" not in load_config(config_dir)
     assert not (config_dir / "AuthKey_ABC123DEF4.p8").exists()
     assert p8_key.exists()  # the user's own download is never touched
+
+
+def saved_weatherkit(config_dir, p8_key, capsys):
+    save_config(config_dir, {"default": TAIPEI_DEFAULT})
+    run(wk_args(p8_key), FakeHttp({WK_AVAIL: WK_AVAILABLE_NO_ALERTS, WK: WEATHERKIT}), capsys)
+
+
+def new_key(p8_key):
+    path = p8_key.with_name("AuthKey_NEWKEY5678.p8")
+    path.write_bytes(p8_key.read_bytes())
+    return path
+
+
+def test_new_key_keeps_the_saved_ids(config_dir, p8_key, capsys):
+    saved_weatherkit(config_dir, p8_key, capsys)
+    code, out = run(["weatherkit", "--key-file", str(new_key(p8_key))],
+                    FakeHttp({WK_AVAIL: WK_AVAILABLE_NO_ALERTS, WK: WEATHERKIT}), capsys)
+    assert code == 0
+    assert out.splitlines()[0] == "saved: weatherkit (test request succeeded; kept the saved team_id and service_id)"
+    wk = load_config(config_dir)["weatherkit"]
+    assert (wk["team_id"], wk["service_id"], wk["key_id"]) == ("TEAM123456", "dev.example.weather", "NEWKEY5678")
+    assert wk["key_path"] == str(config_dir / "AuthKey_NEWKEY5678.p8")
+
+
+def test_new_key_removes_the_old_copy(config_dir, p8_key, capsys):
+    saved_weatherkit(config_dir, p8_key, capsys)
+    run(["weatherkit", "--key-file", str(new_key(p8_key))],
+        FakeHttp({WK_AVAIL: WK_AVAILABLE_NO_ALERTS, WK: WEATHERKIT}), capsys)
+    assert not (config_dir / "AuthKey_ABC123DEF4.p8").exists()
+    assert (config_dir / "AuthKey_NEWKEY5678.p8").exists()
+    assert p8_key.exists()  # the user's own download is never touched
+
+
+def test_key_only_with_nothing_saved_says_ask_never_guess(config_dir, p8_key, capsys):
+    code, out = run(["weatherkit", "--key-file", str(p8_key)], FakeHttp({}), capsys)
+    assert code == 1
+    assert out.startswith("error: weatherkit_config_incomplete (team_id, service_id)")
+    assert "never guess" in out
+
+
+def test_rejected_key_says_which_ids_were_used_and_not_to_guess(config_dir, p8_key, capsys):
+    saved_weatherkit(config_dir, p8_key, capsys)
+    code, out = run(["weatherkit", "--key-file", str(new_key(p8_key))],
+                    FakeHttp({WK_AVAIL: WK_AVAILABLE_NO_ALERTS, WK: HttpError(401)}), capsys)
+    assert code == 1
+    first, action = out.splitlines()
+    assert first == ("error: weatherkit_auth_failed (HTTP 401; team_id=TE…56 from saved config, "
+                     "service_id=de…er from saved config, key_id=NEWKEY5678)")
+    assert "never guess" in action
+    assert "TEAM123456" not in out
+    assert load_config(config_dir)["weatherkit"]["key_id"] == "ABC123DEF4"  # old setup untouched
