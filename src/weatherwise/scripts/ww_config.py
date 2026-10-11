@@ -58,9 +58,15 @@ def _shape_problem(cfg) -> str | None:
     return None
 
 
+def ensure_private_dir(d: Path) -> None:
+    """Create the config dir and keep it private; it holds the copied .p8 key."""
+    d.mkdir(parents=True, exist_ok=True)
+    os.chmod(d, 0o700)
+
+
 def save_config(d: Path, cfg: dict) -> None:
     """Write to a temp file, then rename, so a failure never leaves a half-written config."""
-    d.mkdir(parents=True, exist_ok=True)
+    ensure_private_dir(d)
     fd, tmp = tempfile.mkstemp(dir=d, suffix=".tmp")
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:

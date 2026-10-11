@@ -159,3 +159,24 @@ def test_rejected_key_says_which_ids_were_used_and_not_to_guess(config_dir, p8_k
     assert "never guess" in action
     assert "TEAM123456" not in out
     assert load_config(config_dir)["weatherkit"]["key_id"] == "ABC123DEF4"  # old setup untouched
+
+
+def test_key_copy_is_restrictive_without_relying_on_a_later_chmod(config_dir, p8_key, capsys, monkeypatch):
+    # The copy must create the .p8 as 0600 from the start, not world-readable
+    # for a window before a chmod. Neutralise chmod and a permissive umask so
+    # only the creation mode remains.
+    save_config(config_dir, {"default": TAIPEI_DEFAULT})
+    monkeypatch.setattr(os, "chmod", lambda *a, **k: None)
+    old = os.umask(0)
+    try:
+        run(wk_args(p8_key), FakeHttp({WK_AVAIL: WK_AVAILABLE_NO_ALERTS, WK: WEATHERKIT}), capsys)
+    finally:
+        os.umask(old)
+    copy = config_dir / "AuthKey_ABC123DEF4.p8"
+    assert stat.S_IMODE(os.stat(copy).st_mode) == 0o600
+
+
+def test_config_dir_is_private(config_dir, p8_key, capsys):
+    save_config(config_dir, {"default": TAIPEI_DEFAULT})
+    run(wk_args(p8_key), FakeHttp({WK_AVAIL: WK_AVAILABLE_NO_ALERTS, WK: WEATHERKIT}), capsys)
+    assert stat.S_IMODE(os.stat(config_dir).st_mode) == 0o700

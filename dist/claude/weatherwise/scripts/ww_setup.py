@@ -1,9 +1,8 @@
 """The config commands an agent runs on the user's behalf. Every write is validated first."""
 import os
-import shutil
 from pathlib import Path
 
-from ww_config import KEY_FILE_NAME, mask, resolve_lang, save_config, weatherkit_settings
+from ww_config import KEY_FILE_NAME, ensure_private_dir, mask, resolve_lang, save_config, weatherkit_settings
 from ww_errors import WwError
 from ww_http import HttpError
 from ww_model import Place
@@ -82,10 +81,14 @@ def set_weatherkit(team_id, service_id, key_file, key_id, country_code, cfg, d, 
             raise WwError("weatherkit_auth_failed", f"HTTP {e.status}; {used}, key_id={key_id}") from None
         raise WwError("service_error", f"weatherkit HTTP {e.status}") from None
 
-    d.mkdir(parents=True, exist_ok=True)
+    ensure_private_dir(d)
     dest = d / f"AuthKey_{key_id}.p8"
     if src.resolve() != dest.resolve():
-        shutil.copyfile(src, dest)
+        # Create the key as 0600 from the start, so it is never world-readable
+        # for a window between the copy and a later chmod.
+        fd = os.open(dest, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "wb") as f:
+            f.write(src.read_bytes())
     os.chmod(dest, 0o600)
     old_copy = Path(saved.get("key_path", "")).expanduser()
     if saved.get("key_path") and old_copy.parent.resolve() == d.resolve() and old_copy.resolve() != dest.resolve():
