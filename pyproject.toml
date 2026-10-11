@@ -1,0 +1,16 @@
+[project]
+name = "smallyuan-skills"
+version = "0.0.0"
+requires-python = ">=3.10"
+dependencies = []
+
+[dependency-groups]
+dev = ["pytest>=8", "pyjwt[crypto]>=2.8"]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src/weatherwise/scripts", "tools"]
+markers = ["live: real network requests (skip with -m 'not live')"]

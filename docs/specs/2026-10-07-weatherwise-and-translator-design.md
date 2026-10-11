@@ -59,7 +59,7 @@ skills/
 | 模式 | 什麼時候用 | 警報 |
 |---|---|---|
 | Open-Meteo（預設） | 設定檔沒有 `weatherkit` 區塊，或根本沒有設定檔 | 一律 `unsupported` |
-| WeatherKit（選配） | 設定檔有完整的 `weatherkit` 區塊 | `none` 或列出內容；回應裡沒有警報資料（部分地區）時是 `unsupported` |
+| WeatherKit（選配） | 設定檔有完整的 `weatherkit` 區塊 | 先查 availability 端點：Apple 在該地有警報資料才是 `none` 或列出內容，否則 `unsupported`。**台灣、日本都沒有**（2026-10-07 實測），美國有 |
 
 兩個來源各寫一個函式，回傳同一種結構（目前天氣、每日預報、警報狀態），再由同一段程式輸出，所以兩種模式的輸出格式完全相同。天氣狀況統一成英文名稱：WeatherKit 的 `conditionCode` 轉成可讀的英文（例如 `PartlyCloudy` → `Partly Cloudy`），Open-Meteo 的 WMO 代碼對照到同一組英文名稱。
 
