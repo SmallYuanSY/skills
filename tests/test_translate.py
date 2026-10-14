@@ -58,3 +58,13 @@ def test_check_reports_drift(src, tmp_path):
 
 def test_repo_dist_is_up_to_date():
     assert check(ROOT / "src", ROOT / "dist") == []
+
+
+def test_folders_without_a_root_skill_md_are_left_alone(src, tmp_path):
+    other = src / "bundle"
+    (other / "hermes" / "part").mkdir(parents=True)
+    (other / "hermes" / "part" / "SKILL.md").write_text("{{NOT_OURS}}\n")
+    out = tmp_path / "dist"
+    build(src, out)
+    assert not (out / "hermes" / "bundle").exists()
+    assert check(src, out) == []

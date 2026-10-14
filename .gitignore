@@ -6,3 +6,6 @@ __pycache__/
 /tests/private-terms.local.txt
 *.p8
 AuthKey_*
+/src/routine-keeper/**/config.json
+/src/routine-keeper/**/data/
+/build/
