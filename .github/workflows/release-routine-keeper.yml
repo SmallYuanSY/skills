@@ -1,0 +1,20 @@
+name: release-routine-keeper
+on:
+  push:
+    tags: ["routine-keeper-v*"]
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv run pytest -m "not live"
+      - run: uv run tools/package.py routine-keeper --out build
+      - run: >
+          gh release create "$GITHUB_REF_NAME"
+          build/routine-keeper-hermes.zip build/routine-keeper-claude.zip
+          --title "$GITHUB_REF_NAME" --generate-notes
+        env:
+          GH_TOKEN: ${{ github.token }}
