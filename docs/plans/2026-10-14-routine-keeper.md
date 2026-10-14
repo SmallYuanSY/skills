@@ -2097,7 +2097,7 @@ git commit -m "feat: routine-keeper CLI with item and config commands"
   - `logs.check_not_future(at, for_date, now, today) -> None`（錯誤 `future_time`）
   - `logs.logs_on(conn, item_id, day) -> list[Row]`
   - `logs.add_log(conn, item, *, at, for_date, note, force, now, today) -> int`
-  - `logs.done_days(conn, item_id, until) -> list[date]`（依 for_date、at、id 排序）
+  - `logs.done_days(conn, item_id, until) -> list[date]`（依 for_date、實際時刻 `julianday(at)`、id 排序；`at` 帶時區偏移，字串排序在改過時區後會錯）
   - `logs.done_logs(conn, item_id, until) -> list[Row]`（同樣的排序，給需要知道是哪一筆的地方）
   - `logs.skip_days(conn, item_id) -> dict[date, str | None]`
   - `logs.add_skip(conn, item, *, for_date, reason, now, today) -> bool`、`logs.undo_skip(conn, item, *, for_date, now) -> bool`
@@ -2211,6 +2211,15 @@ def test_backfilled_earlier_log_reports_its_own_settlement(root, capsys):
     run(root, capsys, "done", "Mop", "--at", "2026-10-13 11:00", now=at_tpe("2026-10-13 11:30"))
     code, out = run(root, capsys, "done", "Mop", "--at", "2026-10-13 10:00", now=at_tpe("2026-10-13 11:30"))
     assert out.splitlines()[1] == "schedule: counts for Wed 2026-10-14 (1 day early)"
+
+
+def test_order_within_a_day_follows_the_real_instant_across_timezones(root, capsys):
+    run(root, capsys, "item", "add", "--kind", "chore", "--name", "Mop", "--schedule", "weekly:wed",
+        now=at_tpe("2026-10-07 09:00"))
+    run(root, capsys, "done", "Mop", "--at", "2026-10-13 10:00")   # 02:00 UTC
+    run(root, capsys, "config", "set", "timezone", "UTC")
+    code, out = run(root, capsys, "done", "Mop", "--at", "2026-10-13 03:00", "--for", "2026-10-13")   # later
+    assert out.splitlines()[1:] == ["schedule: extra (no scheduled day nearby)"]
 
 
 def test_interval_done_early(root, capsys):
@@ -2351,7 +2360,8 @@ def check_not_future(at, for_date, now, today) -> None:
 
 
 def logs_on(conn, item_id: int, day: date):
-    return conn.execute("SELECT * FROM logs WHERE item_id=? AND for_date=? AND deleted_at IS NULL ORDER BY at, id",
+    return conn.execute("SELECT * FROM logs WHERE item_id=? AND for_date=? AND deleted_at IS NULL"
+                        " ORDER BY julianday(at), id",
                         (item_id, day.isoformat())).fetchall()
 
 
@@ -2373,7 +2383,7 @@ def add_log(conn, item, *, at, for_date, note, force, now, today) -> int:
 
 def done_logs(conn, item_id: int, until: date):
     return conn.execute("SELECT * FROM logs WHERE item_id=? AND deleted_at IS NULL AND for_date<=?"
-                        " ORDER BY for_date, at, id", (item_id, until.isoformat())).fetchall()
+                        " ORDER BY for_date, julianday(at), id", (item_id, until.isoformat())).fetchall()
 
 
 def done_days(conn, item_id: int, until: date) -> list[date]:
@@ -2426,7 +2436,7 @@ def list_logs(conn, *, item_id=None, start=None, end=None, limit=50):
     if end is not None:
         sql += " AND logs.for_date<=?"
         args.append(end.isoformat())
-    sql += " ORDER BY logs.for_date DESC, logs.at DESC, logs.id DESC LIMIT ?"
+    sql += " ORDER BY logs.for_date DESC, julianday(logs.at) DESC, logs.id DESC LIMIT ?"
     args.append(max(1, limit))
     return conn.execute(sql, args).fetchall()
 
@@ -2869,6 +2879,9 @@ def test_done_today_but_another_scheduled_day_still_open(root, capsys):
     run(root, capsys, "done", "Mop", "--at", "2026-10-17 10:00", now=at_tpe("2026-10-17 10:30"))
     out = run(root, capsys, "time", "today", now=at_tpe("2026-10-17 10:30"))[1]
     assert "- Mop [weekly:fri,sat]: done 10:00 | still due Sat 2026-10-17" in out.splitlines()
+    data = json.loads(run(root, capsys, "--json", "time", "today", now=at_tpe("2026-10-17 10:30"))[1])
+    mop = [i for i in data["items"] if i["name"] == "Mop"][0]
+    assert (mop["state"], mop["also_due"]) == ("done", "2026-10-17")
 
 
 def test_changing_the_schedule_judges_from_then_on(root, capsys):
@@ -2923,7 +2936,8 @@ def test_time_json(root, capsys):
     assert data["date"] == "2026-10-14"
     assert data["items"][0] == {
         "name": "Vitamin D", "kind": "dose", "schedule": "daily", "slot": None, "state": "done", "ref": None,
-        "last_done": "2026-10-14", "missed": [], "done_times": ["10:42"], "notes": [], "text": "done 10:42"}
+        "last_done": "2026-10-14", "missed": [], "done_times": ["10:42"], "also_due": None, "notes": [],
+        "text": "done 10:42"}
 ```
 
 註：`test_changing_timezone_keeps_past_days` 的 `done 23:30` 是紀錄當時的本地時間（紀錄存的是 `at` 原字串），改時區不會改寫既有紀錄的顯示。
@@ -3014,6 +3028,7 @@ def time_day(ctx: Ctx, a) -> Result:
                 "state": st.state, "ref": st.ref.isoformat() if st.ref else None,
                 "last_done": st.last_done.isoformat() if st.last_done else None,
                 "missed": [m.isoformat() for m in st.missed], "done_times": times,
+                "also_due": st.also_due.isoformat() if st.also_due else None,
                 "notes": [{"id": n["id"], "text": n["text"]} for n in notes], "text": text})
     return Result(lines, data)
 ```
@@ -3066,7 +3081,7 @@ git commit -m "feat: routine-keeper time command shows a day's chores and doses"
 - Produces:
   - `storage.count_rows(conn) -> dict[str, int]`
   - `storage.move_data(root, target: Path, *, mode: str, now: datetime, default_tz: str) -> dict`，`mode ∈ {"copy","use_existing","overwrite"}`，回傳 `{"from": str, "to": str, "kept_as": str | None, "replaced_as": str | None, "changed": bool}`
-    - 任何檔案系統錯誤都是 `data_unavailable`（exit 3），並且**回滾到搬移前的狀態**：舊 DB 原位、目標原本的 DB 原位、config 不變、暫存檔刪除。只有全部步驟成功後才更新 config（最後一步）。
+    - 任何檔案系統錯誤都是 `data_unavailable`（exit 3）。順序是：目標端換檔 → 寫 config（切換點）→ 最後才把舊 DB 改名保留。切換前失敗時，舊 DB 從頭到尾都沒動，回滾只處理目標端；回滾本身失敗的話，錯誤訊息會列出留下的檔案路徑，不會說「什麼都沒變」。切換後舊檔改名失敗不算錯：資料已經在新位置，只回報舊檔留在原處。
   - `cmd_admin.data_command(args, *, root, now, default_tz) -> Result`
   - `cmd_admin.export(ctx, a) -> Result`
 
@@ -3077,6 +3092,7 @@ git commit -m "feat: routine-keeper time command shows a day's chores and doses"
 ```python
 import json
 import sqlite3
+from pathlib import Path
 
 from routine_core import storage
 from rk_helpers import run, root  # noqa: F401
@@ -3182,6 +3198,27 @@ def test_failed_config_write_rolls_the_move_back(root, capsys, tmp_path, monkeyp
     assert "Vitamin D" in run(root, capsys, "item", "list")[1]
 
 
+def test_a_failed_undo_is_reported_and_the_source_still_works(root, capsys, tmp_path, monkeypatch):
+    seed(root, capsys)
+    target = tmp_path / "elsewhere"
+    target.mkdir()
+    sqlite3.connect(target / "routine.db").close()
+    _fail_on_config_save(monkeypatch)
+    real_rename = Path.rename
+
+    def rename(self, dest):
+        if self.name.startswith("routine.db.replaced-"):
+            raise PermissionError("stuck")
+        return real_rename(self, dest)
+    monkeypatch.setattr(Path, "rename", rename)
+    code, out = run(root, capsys, "data", "move", "--to", str(target), "--overwrite")
+    assert code == 3
+    assert "could not clean up: " in out.splitlines()[0] and "routine.db.replaced-" in out.splitlines()[0]
+    monkeypatch.undo()
+    assert storage.data_dir(root) == root / "data"
+    assert "Vitamin D" in run(root, capsys, "item", "list")[1]
+
+
 def test_failed_config_write_on_use_existing(root, capsys, tmp_path, monkeypatch):
     other = tmp_path / "other-root"
     other.mkdir()
@@ -3224,6 +3261,13 @@ Expected: FAIL，`error: bad_arguments (argument cmd: invalid choice: 'data' ...
 - [ ] **Step 3: 在 `storage.py` 檔尾實作 `move_data`**
 
 ```python
+def _quiet_unlink(path: Path) -> None:
+    try:
+        path.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
 def count_rows(conn) -> dict:
     return {t: conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0] for t in db.TABLES}
 
@@ -3272,35 +3316,41 @@ def move_data(root: Path, target: Path, *, mode: str, now, default_tz: str) -> d
         same = count_rows(src) == count_rows(dst)
         dst.close()
     except sqlite3.Error as e:
-        incoming.unlink(missing_ok=True)
+        _quiet_unlink(incoming)
         raise RkError("data_unavailable", f"{target}: {type(e).__name__}") from None
     finally:
         src.close()
     if not same:
-        incoming.unlink(missing_ok=True)
+        _quiet_unlink(incoming)
         raise RkError("move_verify_failed", "row counts differ after copying")
     replaced = new_db.with_name(f"{DB_NAME}.replaced-{stamp}")
-    kept = old_db.with_name(f"{DB_NAME}.moved-{stamp}")
-    undo = []   # each step registers how to take itself back; config is written last
+    undo = []   # (what, how to take it back); the source database is not touched before the switch
     try:
         if new_db.exists():
             new_db.rename(replaced)
-            undo.append(lambda: replaced.rename(new_db))
+            undo.append((f"{replaced} (the database that was in {target})", lambda: replaced.rename(new_db)))
             result["replaced_as"] = str(replaced)
         os.replace(incoming, new_db)
-        undo.append(lambda: new_db.unlink())
-        old_db.rename(kept)
-        undo.append(lambda: kept.rename(old_db))
-        result["kept_as"] = str(kept)
-        _point_config_to(root, target)
+        undo.append((f"{new_db} (the new copy)", lambda: new_db.unlink()))
+        _point_config_to(root, target)   # the switch
     except OSError as e:
-        for step in reversed(undo):
+        left = []
+        for what, step in reversed(undo):
             try:
                 step()
             except OSError:
-                pass
-        incoming.unlink(missing_ok=True)
-        raise RkError("data_unavailable", f"{target}: {type(e).__name__}; nothing was changed") from None
+                left.append(what)
+        _quiet_unlink(incoming)
+        detail = f"{target}: {type(e).__name__}; your data is unchanged in {old_dir}"
+        if left:
+            detail += "; could not clean up: " + ", ".join(left)
+        raise RkError("data_unavailable", detail) from None
+    kept = old_db.with_name(f"{DB_NAME}.moved-{stamp}")
+    try:
+        old_db.rename(kept)
+        result["kept_as"] = str(kept)
+    except OSError:
+        result["kept_as"] = str(old_db)   # switched already; the old file just keeps its name
     return result
 ```
 
@@ -3344,7 +3394,10 @@ def export(ctx: Ctx, a) -> Result:
         tmp.write_text(text, encoding="utf-8")
         os.replace(tmp, path)
     except OSError as e:
-        tmp.unlink(missing_ok=True)
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            pass   # e.g. an ancestor is a file: there is nothing to clean up
         raise RkError("data_unavailable", f"{path}: {type(e).__name__}") from None
     n_items, n_logs = len(tables["items"]), len(tables["logs"])
     return Result([f"ok: exported {n_items} items, {n_logs} logs to {path}"],
