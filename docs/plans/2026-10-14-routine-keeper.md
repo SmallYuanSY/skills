@@ -688,7 +688,8 @@ git commit -m "feat: routine-keeper schedule rules and plain descriptions"
   - `evaluate_weekly(days: tuple[int, ...], early: int, late: int, completions: list[date], skips: set[date], start: date, until: date) -> tuple[list[Occurrence], list[Settlement]]`
     - 場次範圍：`start` 到 `until + early`，星期在 `days` 裡的日子。
     - 呼叫端只傳 `<= until` 的完成日。
-    - 配對規則（spec「排程規則 › weekly」）：每次完成依時間順序，抵掉「窗口包含它、尚未被抵、未被 skip」的最早場次；所有「尚未被抵、未 skip、窗口結束早於這次完成」的場次標 `merged`；都沒有就是 `extra`。
+    - 配對規則（spec「排程規則 › weekly」）：每次完成依輸入順序（呼叫端必須先依時間排好），抵掉「窗口包含它、尚未被抵、未被 skip」的最早場次；所有「尚未被抵、未 skip、日期早於這次完成」的場次標 `merged`；都沒有就是 `extra`。
+    - 回傳的 `settlements` 與輸入的 `completions` 一一對應、順序相同，呼叫端可以用 index 對回是哪一筆紀錄。
     - 未被抵的場次相對 `until`：`day >= until` → `due`（範圍只到 `until + early`，所以都在提前窗口內）；`day + late >= until` → `makeup`；否則 `missed`。「下一個場次」不在這裡算，由 Task 5 的 `day_status` 處理。
 
 - [ ] **Step 1: 寫失敗測試**
@@ -798,6 +799,19 @@ def test_overlapping_windows_prefer_the_earlier_day():
     assert s["2026-10-17"] == "due"
 
 
+def test_one_completion_merges_every_open_day_before_it():
+    # weekly:mon,tue,wed, window -1,+2: Wednesday makes up Monday, settles Tuesday, Wednesday stays due.
+    occ, sets = run_week(["2026-10-14"], "2026-10-14", days=(0, 1, 2), start="2026-10-12")
+    s = statuses(occ)
+    assert (s["2026-10-12"], s["2026-10-13"], s["2026-10-14"]) == ("done_late", "merged", "due")
+    assert sets[0].claimed == d("2026-10-12") and sets[0].merged == [d("2026-10-13")]
+
+
+def test_settlements_follow_the_input_order():
+    _, sets = run_week(["2026-10-07", "2026-10-13", "2026-10-13"], "2026-10-13", days=(2,))
+    assert [s.claimed for s in sets] == [d("2026-10-07"), d("2026-10-14"), None]
+
+
 def test_two_completions_in_one_window_claim_two_days():
     occ, sets = run_week(["2026-10-16", "2026-10-17"], "2026-10-17", days=(4, 5), start="2026-10-16")
     s = statuses(occ)
@@ -841,8 +855,9 @@ def evaluate_weekly(days, early, late, completions, skips, start, until):
     """Settle each scheduled day in [start, until + early] against the completions (all <= until).
 
     A completion claims the earliest open day whose window holds it, so making up comes before
-    doing early. It also settles every open day whose window ended before it as "merged": doing
-    it once clears what was missed, nothing piles up. Skipped days are never claimed or merged.
+    doing early. It also settles every other open day before it as "merged": doing it once clears
+    what was missed, nothing piles up. Skipped days are never claimed or merged.
+    `completions` must already be in time order; settlements[i] belongs to completions[i].
     """
     before, after = timedelta(days=early), timedelta(days=late)
     occ_days = []
@@ -853,14 +868,14 @@ def evaluate_weekly(days, early, late, completions, skips, start, until):
         d += timedelta(days=1)
     state: dict[date, tuple[str, date | None]] = {o: ("skipped", None) for o in occ_days if o in skips}
     settlements = []
-    for c in sorted(completions):
+    for c in completions:
         open_days = [o for o in occ_days if o not in state]
         holding = [o for o in open_days if o - before <= c <= o + after]
         claimed = min(holding) if holding else None
         offset = (c - claimed).days if claimed else 0
         if claimed:
             state[claimed] = ("done" if offset == 0 else "done_early" if offset < 0 else "done_late", c)
-        merged = [o for o in open_days if o != claimed and o + after < c]
+        merged = [o for o in open_days if o != claimed and o < c]
         for o in merged:
             state[o] = ("merged", c)
         settlements.append(Settlement(c, claimed, offset, merged))
@@ -901,13 +916,13 @@ git commit -m "feat: weekly schedule settlement with make-up, early, merge, and 
 **Interfaces:**
 - Consumes: `Schedule`, `Settlement`, `evaluate_weekly`（Task 3–4）
 - Produces:
-  - `@dataclass DayStatus(state: str, ref: date | None = None, last_done: date | None = None, missed: list[date] = [], settlement: Settlement | None = None)`
+  - `@dataclass DayStatus(state: str, ref: date | None = None, last_done: date | None = None, missed: list[date] = [], settlement: Settlement | None = None, also_due: date | None = None)`
     - `state ∈ {"done","not_done","skipped","idle","never_done","upcoming","due","makeup","missed"}`
   - `day_status(sch: Schedule, early: int, late: int, start: date, done_days: list[date], skips: set[date], q: date) -> DayStatus`
     - `done_days` 可以有重複、可以含 `> q` 的日子（會被忽略）。
     - weekly 只把 `>= start - early` 的完成拿去配對；`last_done` 用全部完成。
     - interval：`q` 當天有完成 → `done`，`ref = q + n`；沒有完成過 → `never_done`；否則 `ref = 上次 + n`，`q < ref` → `upcoming`，否則 `due`。
-    - weekly：當天有完成 → `done`（附該天最後一筆 settlement）；否則依序：第一個 `due`/`makeup` 場次 → 該狀態；有 `missed` → `missed`（ref = 最後一個）；當天場次被 skip → `skipped`；否則 `upcoming`（ref = `q + early` 之後的第一個場次）。
+    - weekly：當天有完成 → `done`（附該天最後一筆 settlement；若還有 `due`/`makeup` 場次，放進 `also_due`）；否則依序：第一個 `due`/`makeup` 場次 → 該狀態；有 `missed` → `missed`（ref = 最後一個）；當天場次被 skip → `skipped`；否則 `upcoming`（ref = `q + early` 之後、且不早於 `start` 的第一個場次）。
 
 - [ ] **Step 1: 寫失敗測試**
 
@@ -1010,6 +1025,16 @@ def test_weekly_only_missed():
     assert (st.state, st.ref) == ("missed", d("2026-10-05"))
 
 
+def test_weekly_done_but_another_day_still_due():
+    st = ds(Schedule("weekly", days=(4, 5)), ["2026-10-17"], "2026-10-17", start=d("2026-10-16"))
+    assert (st.state, st.also_due) == ("done", d("2026-10-17"))
+
+
+def test_weekly_next_day_is_never_before_start():
+    st = ds(Schedule("weekly", days=(5,)), [], "2026-10-07", start=d("2026-10-14"))
+    assert (st.state, st.ref) == ("upcoming", d("2026-10-17"))
+
+
 def test_weekly_ignores_completions_long_before_start():
     st = ds(WED_SAT, ["2026-09-01"], "2026-10-14", start=d("2026-10-14"))
     assert (st.state, st.ref, st.last_done) == ("due", d("2026-10-14"), d("2026-09-01"))
@@ -1037,6 +1062,7 @@ class DayStatus:
     last_done: date | None = None
     missed: list[date] = field(default_factory=list)
     settlement: Settlement | None = None
+    also_due: date | None = None  # weekly: done today, yet a scheduled day is still open (e.g. fri,sat)
 
 
 def _next_weekly(after: date, days: tuple[int, ...]) -> date:
@@ -1065,18 +1091,21 @@ def day_status(sch: Schedule, early: int, late: int, start: date, done_days: lis
     counted = [x for x in done if x >= start - timedelta(days=early)]
     occ, settlements = evaluate_weekly(sch.days, early, late, counted, skips, start, q)
     missed = [o.day for o in occ if o.status == "missed"]
+    pending = [o for o in occ if o.status in ("due", "makeup")]
     if done_today:
         mine = [s for s in settlements if s.day == q]
-        return DayStatus("done", last_done=q, missed=missed, settlement=mine[-1] if mine else None)
-    pending = [o for o in occ if o.status in ("due", "makeup")]
+        return DayStatus("done", last_done=q, missed=missed, settlement=mine[-1] if mine else None,
+                         also_due=pending[0].day if pending else None)
     if pending:
         return DayStatus(pending[0].status, ref=pending[0].day, last_done=last, missed=missed)
     if missed:
         return DayStatus("missed", ref=missed[-1], last_done=last, missed=missed)
     if any(o.day == q and o.status == "skipped" for o in occ):
         return DayStatus("skipped", ref=q, last_done=last)
-    # every scheduled day up to q + early is settled, so the next one comes after that
-    return DayStatus("upcoming", ref=_next_weekly(q + timedelta(days=early), sch.days), last_done=last)
+    # every scheduled day up to q + early is settled, so the next one comes after that,
+    # and never before the day the current rule started
+    after = max(q + timedelta(days=early), start - timedelta(days=1))
+    return DayStatus("upcoming", ref=_next_weekly(after, sch.days), last_done=last)
 ```
 
 - [ ] **Step 4: 跑測試確認通過**
@@ -1974,10 +2003,23 @@ def _print_error(err: RkError, as_json: bool) -> None:
     print(json.dumps(error_data(err), ensure_ascii=False, indent=2) if as_json else render_error(err))
 
 
+def _join_window(argv: list[str]) -> list[str]:
+    """argparse reads "-1,+2" as an option; glue it to --window so "--window -1,+2" works."""
+    out, i = [], 0
+    while i < len(argv):
+        if argv[i] == "--window" and i + 1 < len(argv):
+            out.append(f"--window={argv[i + 1]}")
+            i += 2
+        else:
+            out.append(argv[i])
+            i += 1
+    return out
+
+
 def main(argv=None, *, now=None, root=None, default_tz=None) -> int:
     argv = sys.argv[1:] if argv is None else list(argv)
     as_json = "--json" in argv
-    argv = [x for x in argv if x != "--json"]
+    argv = _join_window([x for x in argv if x != "--json"])
     root = Path(root) if root else storage.SKILL_ROOT
     now = now or datetime.now(timezone.utc)
     conn = None
@@ -2055,13 +2097,15 @@ git commit -m "feat: routine-keeper CLI with item and config commands"
   - `logs.check_not_future(at, for_date, now, today) -> None`（錯誤 `future_time`）
   - `logs.logs_on(conn, item_id, day) -> list[Row]`
   - `logs.add_log(conn, item, *, at, for_date, note, force, now, today) -> int`
-  - `logs.done_days(conn, item_id, until) -> list[date]`
+  - `logs.done_days(conn, item_id, until) -> list[date]`（依 for_date、at、id 排序）
+  - `logs.done_logs(conn, item_id, until) -> list[Row]`（同樣的排序，給需要知道是哪一筆的地方）
   - `logs.skip_days(conn, item_id) -> dict[date, str | None]`
   - `logs.add_skip(conn, item, *, for_date, reason, now, today) -> bool`、`logs.undo_skip(conn, item, *, for_date, now) -> bool`
   - `logs.get_log(conn, log_id, *, deleted: bool | None = False) -> Row`（含 `item_name`）
   - `logs.list_logs(conn, *, item_id=None, start=None, end=None, limit=50) -> list[Row]`
-  - `logs.edit_log(conn, log_id, *, at=None, for_date=None, note=None, boundary, now, today) -> dict[str, tuple]`
-  - `logs.delete_log(conn, log_id, now) -> Row`、`logs.restore_log(conn, log_id) -> Row`
+  - `logs.edit_log(conn, log_id, *, at=None, for_date=None, note=None, force=False, boundary, now, today) -> dict[str, tuple]`
+  - `logs.delete_log(conn, log_id, now) -> Row`、`logs.restore_log(conn, log_id, *, force=False) -> Row`
+  - dose 的「同一天只能一筆」在 `add_log`、`edit_log`（換到別天時）、`restore_log` 都檢查，`--force` 才放行。
   - `notes.add_note(conn, item, text, now) -> int`、`notes.open_notes(conn, item_id=None) -> list[Row]`
   - `notes.resolve_note(conn, note_id, now) -> Row`、`notes.resolve_for_item(conn, item_id, log_id, now) -> list[Row]`
   - `cmd_logs.item_status(ctx, item, q) -> DayStatus`（Task 9 也用）
@@ -2161,6 +2205,21 @@ def test_weekly_done_early_and_extra(root, capsys):
     assert out.splitlines()[1:] == ["schedule: extra (no scheduled day nearby)"]
 
 
+def test_backfilled_earlier_log_reports_its_own_settlement(root, capsys):
+    run(root, capsys, "item", "add", "--kind", "chore", "--name", "Mop", "--schedule", "weekly:wed",
+        now=at_tpe("2026-10-07 09:00"))
+    run(root, capsys, "done", "Mop", "--at", "2026-10-13 11:00", now=at_tpe("2026-10-13 11:30"))
+    code, out = run(root, capsys, "done", "Mop", "--at", "2026-10-13 10:00", now=at_tpe("2026-10-13 11:30"))
+    assert out.splitlines()[1] == "schedule: counts for Wed 2026-10-14 (1 day early)"
+
+
+def test_interval_done_early(root, capsys):
+    setup_items(root, capsys)
+    run(root, capsys, "done", "Bed sheets", "--at", "2026-09-29 12:00")
+    code, out = run(root, capsys, "done", "Bed sheets", "--at", "2026-10-11 12:00")
+    assert out.splitlines()[1] == "schedule: planned for Tue 2026-10-13, done 2 days before; next due Sun 2026-10-25"
+
+
 def test_interval_done_reports_the_plan(root, capsys):
     setup_items(root, capsys)
     code, out = run(root, capsys, "done", "Bed sheets", "--at", "2026-09-19 12:00")
@@ -2237,6 +2296,25 @@ def test_log_list_edit_delete_restore(root, capsys):
     assert "#2" in run(root, capsys, "log", "list")[1]
 
 
+def test_moving_a_dose_onto_a_taken_day_needs_force(root, capsys):
+    setup_items(root, capsys)
+    run(root, capsys, "done", "Vitamin D", "--at", "2026-10-13 09:00")   # 1
+    run(root, capsys, "done", "Vitamin D", "--at", "2026-10-14 09:00")   # 2
+    code, out = run(root, capsys, "log", "edit", "1", "--for", "2026-10-14")
+    assert code == 2 and out.startswith("error: already_logged")
+    assert run(root, capsys, "log", "edit", "1", "--for", "2026-10-14", "--force")[0] == 0
+
+
+def test_restoring_a_dose_onto_a_taken_day_needs_force(root, capsys):
+    setup_items(root, capsys)
+    run(root, capsys, "done", "Vitamin D", "--at", "2026-10-14 09:00")   # 1
+    run(root, capsys, "log", "delete", "1")
+    run(root, capsys, "done", "Vitamin D", "--at", "2026-10-14 10:00")   # 2 takes the day
+    code, out = run(root, capsys, "log", "restore", "1")
+    assert code == 2 and out.startswith("error: already_logged")
+    assert run(root, capsys, "log", "restore", "1", "--force")[0] == 0
+
+
 def test_done_json(root, capsys):
     setup_items(root, capsys)
     run(root, capsys, "note", "add", "Laundry", "wash the jacket")
@@ -2277,22 +2355,29 @@ def logs_on(conn, item_id: int, day: date):
                         (item_id, day.isoformat())).fetchall()
 
 
+def _check_dose_once(conn, item_id: int, kind: str, name: str, day: date, *, force: bool, exclude: int | None = None):
+    if kind != "dose" or force:
+        return
+    same = [r for r in logs_on(conn, item_id, day) if r["id"] != exclude]
+    if same:
+        raise RkError("already_logged", f'{name} for {day} as #{same[0]["id"]} at {same[0]["at"][11:16]}')
+
+
 def add_log(conn, item, *, at, for_date, note, force, now, today) -> int:
     check_not_future(at, for_date, now, today)
-    if item["kind"] == "dose" and not force:
-        same = logs_on(conn, item["id"], for_date)
-        if same:
-            raise RkError("already_logged",
-                          f'{item["name"]} for {for_date} as #{same[0]["id"]} at {same[0]["at"][11:16]}')
+    _check_dose_once(conn, item["id"], item["kind"], item["name"], for_date, force=force)
     cur = conn.execute("INSERT INTO logs(item_id, at, for_date, note, created_at) VALUES (?, ?, ?, ?, ?)",
                        (item["id"], at.isoformat(timespec="minutes"), for_date.isoformat(), note, _ts(now)))
     return cur.lastrowid
 
 
+def done_logs(conn, item_id: int, until: date):
+    return conn.execute("SELECT * FROM logs WHERE item_id=? AND deleted_at IS NULL AND for_date<=?"
+                        " ORDER BY for_date, at, id", (item_id, until.isoformat())).fetchall()
+
+
 def done_days(conn, item_id: int, until: date) -> list[date]:
-    rows = conn.execute("SELECT for_date FROM logs WHERE item_id=? AND deleted_at IS NULL AND for_date<=?"
-                        " ORDER BY for_date, at", (item_id, until.isoformat()))
-    return [date.fromisoformat(r[0]) for r in rows]
+    return [date.fromisoformat(r["for_date"]) for r in done_logs(conn, item_id, until)]
 
 
 def skip_days(conn, item_id: int) -> dict:
@@ -2316,7 +2401,8 @@ def undo_skip(conn, item, *, for_date, now) -> bool:
 
 
 def get_log(conn, log_id: int, *, deleted: bool | None = False):
-    sql = "SELECT logs.*, items.name AS item_name FROM logs JOIN items ON items.id = logs.item_id WHERE logs.id=?"
+    sql = ("SELECT logs.*, items.name AS item_name, items.kind AS item_kind FROM logs"
+           " JOIN items ON items.id = logs.item_id WHERE logs.id=?")
     if deleted is True:
         sql += " AND logs.deleted_at IS NOT NULL"
     elif deleted is False:
@@ -2345,11 +2431,14 @@ def list_logs(conn, *, item_id=None, start=None, end=None, limit=50):
     return conn.execute(sql, args).fetchall()
 
 
-def edit_log(conn, log_id: int, *, at=None, for_date=None, note=None, boundary, now, today) -> dict:
+def edit_log(conn, log_id: int, *, at=None, for_date=None, note=None, force=False, boundary, now, today) -> dict:
     row = get_log(conn, log_id)
     if at is not None and for_date is None:
         for_date = day_of(at, boundary)
     check_not_future(at, for_date, now, today)
+    if for_date is not None and for_date.isoformat() != row["for_date"]:
+        _check_dose_once(conn, row["item_id"], row["item_kind"], row["item_name"], for_date, force=force,
+                         exclude=log_id)
     new = {}
     if at is not None:
         new["at"] = at.isoformat(timespec="minutes")
@@ -2371,8 +2460,10 @@ def delete_log(conn, log_id: int, now):
     return row
 
 
-def restore_log(conn, log_id: int):
+def restore_log(conn, log_id: int, *, force: bool = False):
     row = get_log(conn, log_id, deleted=True)
+    _check_dose_once(conn, row["item_id"], row["item_kind"], row["item_name"], date.fromisoformat(row["for_date"]),
+                     force=force)
     conn.execute("UPDATE logs SET deleted_at=NULL WHERE id=?", (log_id,))
     return row
 ```
@@ -2430,10 +2521,10 @@ from .context import Ctx, Result
 from .dates import day_of, long_day, parse_at, parse_day, plural, short_day
 from .errors import RkError
 from .items import find_item
-from .logs import (add_log, add_skip, delete_log, done_days, edit_log, get_log, list_logs, restore_log,
-                   skip_days, undo_skip)
+from .logs import (add_log, add_skip, delete_log, done_days, done_logs, edit_log, get_log, list_logs,
+                   restore_log, skip_days, undo_skip)
 from .notes import add_note, open_notes, resolve_for_item, resolve_note
-from .schedule import parse_schedule
+from .schedule import evaluate_weekly, parse_schedule
 from .status import DayStatus, day_status
 
 
@@ -2449,7 +2540,19 @@ def _offset_text(offset: int) -> str:
     return f"{plural(abs(offset), 'day')} {'early' if offset < 0 else 'late'}"
 
 
-def _schedule_lines(ctx: Ctx, item, for_date: date) -> list[str]:
+def _settlement_of(ctx: Ctx, item, log_id: int, for_date: date):
+    """The settlement of this very log, not just the last one that day (backfills change the order)."""
+    start = date.fromisoformat(item["start_date"])
+    rows = [r for r in done_logs(ctx.conn, item["id"], for_date)
+            if date.fromisoformat(r["for_date"]) >= start - timedelta(days=item["window_early"])]
+    sch = parse_schedule(item["schedule"])
+    _, settlements = evaluate_weekly(sch.days, item["window_early"], item["window_late"],
+                                     [date.fromisoformat(r["for_date"]) for r in rows],
+                                     set(skip_days(ctx.conn, item["id"])), start, for_date)
+    return next((s for r, s in zip(rows, settlements) if r["id"] == log_id), None)
+
+
+def _schedule_lines(ctx: Ctx, item, log_id: int, for_date: date) -> list[str]:
     sch = parse_schedule(item["schedule"])
     if sch.kind == "interval":
         before = [d for d in done_days(ctx.conn, item["id"], for_date) if d < for_date]
@@ -2462,7 +2565,7 @@ def _schedule_lines(ctx: Ctx, item, for_date: date) -> list[str]:
         return [f"schedule: planned for {short_day(planned)}, done {how}; next due {nxt}"]
     if sch.kind != "weekly":
         return []
-    s = item_status(ctx, item, for_date).settlement
+    s = _settlement_of(ctx, item, log_id, for_date)
     if s is None:
         return []
     lines = []
@@ -2483,7 +2586,7 @@ def done(ctx: Ctx, a) -> Result:
     log_id = add_log(ctx.conn, item, at=at, for_date=for_date, note=a.note, force=a.force, now=ctx.now,
                      today=ctx.today)
     lines = [f"ok: logged #{log_id} {item['name']} for {long_day(for_date)} at {at:%Y-%m-%d %H:%M}"]
-    lines += _schedule_lines(ctx, item, for_date)
+    lines += _schedule_lines(ctx, item, log_id, for_date)
     resolved = [] if a.keep_notes else resolve_for_item(ctx.conn, item["id"], log_id, ctx.now)
     lines += [f"notes_resolved: #{n['id']} {n['text']}" for n in resolved]
     data = {"ok": True, "log": {"id": log_id, "item": item["name"], "for_date": for_date.isoformat(),
@@ -2533,8 +2636,8 @@ def log_list(ctx: Ctx, a) -> Result:
 def log_edit(ctx: Ctx, a) -> Result:
     at = parse_at(a.at, ctx.tz) if a.at else None
     for_date = parse_day(a.for_day, ctx.today) if a.for_day else None
-    changes = edit_log(ctx.conn, a.id, at=at, for_date=for_date, note=a.note, boundary=ctx.boundary, now=ctx.now,
-                       today=ctx.today)
+    changes = edit_log(ctx.conn, a.id, at=at, for_date=for_date, note=a.note, force=a.force, boundary=ctx.boundary,
+                       now=ctx.now, today=ctx.today)
     row = get_log(ctx.conn, a.id)
     if not changes:
         return Result([f"ok: nothing changed on #{a.id}"], {"ok": True, "changes": {}})
@@ -2551,7 +2654,7 @@ def log_delete(ctx: Ctx, a) -> Result:
 
 
 def log_restore(ctx: Ctx, a) -> Result:
-    row = restore_log(ctx.conn, a.id)
+    row = restore_log(ctx.conn, a.id, force=a.force)
     return Result([f"ok: restored #{a.id} {row['item_name']}"], {"ok": True, "log": _log_data(row)})
 
 
@@ -2607,8 +2710,11 @@ def note_resolve(ctx: Ctx, a) -> Result:
     le.add_argument("--at")
     le.add_argument("--for", dest="for_day")
     le.add_argument("--note")
-    for name in ("delete", "restore"):
-        log.add_parser(name).add_argument("id", type=int)
+    le.add_argument("--force", action="store_true")
+    log.add_parser("delete").add_argument("id", type=int)
+    lr = log.add_parser("restore")
+    lr.add_argument("id", type=int)
+    lr.add_argument("--force", action="store_true")
 
     note = sub.add_parser("note").add_subparsers(dest="sub", required=True, parser_class=Parser)
     na = note.add_parser("add")
@@ -2683,7 +2789,7 @@ chores:
 
 | state | 文字 |
 |---|---|
-| done | `done 10:42, 18:00`（當天所有紀錄的時間） |
+| done | `done 10:42, 18:00`（當天所有紀錄的時間）；weekly 還有開著的場次時加 ` \| still due Sat 2026-10-17` |
 | not_done | `not_done` |
 | skipped | `skipped` 或 `skipped (too tired)` |
 | idle | `no schedule` |
@@ -2757,6 +2863,26 @@ def test_a_past_day_only_counts_records_up_to_it(root, capsys):
             "(6 days ago) | missed: Sat 2026-10-10") in out.splitlines()
 
 
+def test_done_today_but_another_scheduled_day_still_open(root, capsys):
+    run(root, capsys, "item", "add", "--kind", "chore", "--name", "Mop", "--schedule", "weekly:fri,sat",
+        now=at_tpe("2026-10-16 09:00"))
+    run(root, capsys, "done", "Mop", "--at", "2026-10-17 10:00", now=at_tpe("2026-10-17 10:30"))
+    out = run(root, capsys, "time", "today", now=at_tpe("2026-10-17 10:30"))[1]
+    assert "- Mop [weekly:fri,sat]: done 10:00 | still due Sat 2026-10-17" in out.splitlines()
+
+
+def test_changing_the_schedule_judges_from_then_on(root, capsys):
+    run(root, capsys, "item", "add", "--kind", "chore", "--name", "Laundry", "--schedule", "weekly:wed",
+        now=at_tpe("2026-09-01 09:00"))
+    run(root, capsys, "done", "Laundry", "--at", "2026-10-07 18:00")
+    run(root, capsys, "item", "edit", "Laundry", "--schedule", "weekly:sat")
+    out = run(root, capsys, "time", "today")[1]
+    assert ("- Laundry [weekly:sat]: next Sat 2026-10-17 (in 3 days) | last done 2026-10-07 (7 days ago)"
+            in out.splitlines())
+    out = run(root, capsys, "time", "2026-10-07")[1]
+    assert "- Laundry [weekly:sat]: done 18:00" in out.splitlines()
+
+
 def test_paused_items_are_hidden(root, capsys):
     run(root, capsys, "item", "add", "--kind", "chore", "--name", "Laundry")
     run(root, capsys, "item", "pause", "Laundry")
@@ -2828,6 +2954,8 @@ def state_text(st: DayStatus, q: date, times: list[str], skip_reason: str | None
     s = st.state
     if s == "done":
         text = "done " + ", ".join(times)
+        if st.also_due:
+            text += f" | still due {short_day(st.also_due)}"
     elif s == "skipped":
         text = "skipped" + (f" ({skip_reason})" if skip_reason else "")
     elif s == "idle":
@@ -2938,6 +3066,7 @@ git commit -m "feat: routine-keeper time command shows a day's chores and doses"
 - Produces:
   - `storage.count_rows(conn) -> dict[str, int]`
   - `storage.move_data(root, target: Path, *, mode: str, now: datetime, default_tz: str) -> dict`，`mode ∈ {"copy","use_existing","overwrite"}`，回傳 `{"from": str, "to": str, "kept_as": str | None, "replaced_as": str | None, "changed": bool}`
+    - 任何檔案系統錯誤都是 `data_unavailable`（exit 3），並且**回滾到搬移前的狀態**：舊 DB 原位、目標原本的 DB 原位、config 不變、暫存檔刪除。只有全部步驟成功後才更新 config（最後一步）。
   - `cmd_admin.data_command(args, *, root, now, default_tz) -> Result`
   - `cmd_admin.export(ctx, a) -> Result`
 
@@ -3030,6 +3159,46 @@ def test_failed_verification_changes_nothing(root, capsys, tmp_path, monkeypatch
     assert storage.data_dir(root) == root / "data"
 
 
+def _fail_on_config_save(monkeypatch):
+    def boom(root, cfg):
+        raise PermissionError("read-only")
+    monkeypatch.setattr(storage, "save_config", boom)
+
+
+def test_failed_config_write_rolls_the_move_back(root, capsys, tmp_path, monkeypatch):
+    seed(root, capsys)
+    target = tmp_path / "elsewhere"
+    target.mkdir()
+    sqlite3.connect(target / "routine.db").execute("CREATE TABLE marker(x)")
+    _fail_on_config_save(monkeypatch)
+    code, out = run(root, capsys, "data", "move", "--to", str(target), "--overwrite")
+    assert code == 3 and out.startswith("error: data_unavailable")
+    monkeypatch.undo()
+    assert sorted(p.name for p in (root / "data").iterdir()) == ["routine.db"]
+    assert sorted(p.name for p in target.iterdir()) == ["routine.db"]
+    assert sqlite3.connect(target / "routine.db").execute(
+        "SELECT name FROM sqlite_master WHERE name='marker'").fetchone()   # the original target is back
+    assert storage.data_dir(root) == root / "data"
+    assert "Vitamin D" in run(root, capsys, "item", "list")[1]
+
+
+def test_failed_config_write_on_use_existing(root, capsys, tmp_path, monkeypatch):
+    other = tmp_path / "other-root"
+    other.mkdir()
+    run(other, capsys, "item", "add", "--kind", "chore", "--name", "Laundry")
+    _fail_on_config_save(monkeypatch)
+    code, out = run(root, capsys, "data", "move", "--to", str(other / "data"), "--use-existing")
+    assert code == 3 and out.startswith("error: data_unavailable")
+
+
+def test_export_to_an_unwritable_place(root, capsys, tmp_path):
+    seed(root, capsys)
+    blocker = tmp_path / "file"
+    blocker.write_text("x")
+    code, out = run(root, capsys, "export", "--file", str(blocker / "sub" / "backup.json"))
+    assert code == 3 and out.startswith("error: data_unavailable")
+
+
 def test_move_options_are_exclusive(root, capsys, tmp_path):
     code, out = run(root, capsys, "data", "move", "--to", str(tmp_path), "--use-existing", "--overwrite")
     assert code == 1 and out.startswith("error: bad_arguments")
@@ -3088,7 +3257,10 @@ def move_data(root: Path, target: Path, *, mode: str, now, default_tz: str) -> d
             conn.close()
         except sqlite3.Error as e:
             raise RkError("data_unavailable", f"{new_db}: {type(e).__name__}") from None
-        _point_config_to(root, target)
+        try:
+            _point_config_to(root, target)
+        except OSError as e:
+            raise RkError("data_unavailable", f"{root}: {type(e).__name__}") from None
         return result
     if new_db.exists() and mode != "overwrite":
         raise RkError("target_exists", str(new_db))
@@ -3107,15 +3279,28 @@ def move_data(root: Path, target: Path, *, mode: str, now, default_tz: str) -> d
     if not same:
         incoming.unlink(missing_ok=True)
         raise RkError("move_verify_failed", "row counts differ after copying")
-    if new_db.exists():
-        replaced = new_db.with_name(f"{DB_NAME}.replaced-{stamp}")
-        new_db.rename(replaced)
-        result["replaced_as"] = str(replaced)
-    os.replace(incoming, new_db)
-    _point_config_to(root, target)
+    replaced = new_db.with_name(f"{DB_NAME}.replaced-{stamp}")
     kept = old_db.with_name(f"{DB_NAME}.moved-{stamp}")
-    old_db.rename(kept)
-    result["kept_as"] = str(kept)
+    undo = []   # each step registers how to take itself back; config is written last
+    try:
+        if new_db.exists():
+            new_db.rename(replaced)
+            undo.append(lambda: replaced.rename(new_db))
+            result["replaced_as"] = str(replaced)
+        os.replace(incoming, new_db)
+        undo.append(lambda: new_db.unlink())
+        old_db.rename(kept)
+        undo.append(lambda: kept.rename(old_db))
+        result["kept_as"] = str(kept)
+        _point_config_to(root, target)
+    except OSError as e:
+        for step in reversed(undo):
+            try:
+                step()
+            except OSError:
+                pass
+        incoming.unlink(missing_ok=True)
+        raise RkError("data_unavailable", f"{target}: {type(e).__name__}; nothing was changed") from None
     return result
 ```
 
@@ -3155,8 +3340,12 @@ def export(ctx: Ctx, a) -> Result:
         return Result([text], data)
     path = Path(a.file).expanduser()
     tmp = path.with_name(f".{path.name}.tmp")
-    tmp.write_text(text, encoding="utf-8")
-    os.replace(tmp, path)
+    try:
+        tmp.write_text(text, encoding="utf-8")
+        os.replace(tmp, path)
+    except OSError as e:
+        tmp.unlink(missing_ok=True)
+        raise RkError("data_unavailable", f"{path}: {type(e).__name__}") from None
     n_items, n_logs = len(tables["items"]), len(tables["logs"])
     return Result([f"ok: exported {n_items} items, {n_logs} logs to {path}"],
                   {"ok": True, "file": str(path), "items": n_items, "logs": n_logs})
@@ -3173,9 +3362,8 @@ from pathlib import Path
 from . import VERSION, db, storage
 from .context import Ctx, Result
 from .dates import parse_boundary, zone
+from .errors import RkError
 ```
-
-（`RkError` 不再需要，刪掉那行 import。）
 
 註：`export` 不加 `--file` 時，`--json` 與文字模式輸出相同的 JSON；`main` 在 `as_json` 時會再 dump `result.data`，結果一樣。
 
@@ -3230,6 +3418,8 @@ git commit -m "feat: routine-keeper data move with verification, and JSON export
 - Create: `src/routine-keeper/claude/SKILL.md`
 - Create: `src/routine-keeper/claude/references/setup.md`
 - Create: `src/routine-keeper/claude/references/history.md`
+- Create: `src/routine-keeper/hermes/routine-log/references/schedule.md`
+- Create: `src/routine-keeper/claude/references/schedule.md`（與 Hermes 版內容相同）
 - Create: `tests/test_routine_skills.py`
 
 **Interfaces:**
@@ -3286,6 +3476,16 @@ def test_hermes_sub_skills_fit_the_index(name):
 def test_hermes_category_description():
     _, fm = frontmatter(HERMES / "DESCRIPTION.md")
     assert "家事" in fm["description"] and "chores" in fm["description"]
+
+
+def test_schedule_reference_is_shared_and_linked():
+    hermes_ref = HERMES / "routine-log" / "references" / "schedule.md"
+    claude_ref = CLAUDE / "references" / "schedule.md"
+    assert hermes_ref.read_text() == claude_ref.read_text()
+    assert "${HERMES_SKILL_DIR}/references/schedule.md" in (HERMES / "routine-log" / "SKILL.md").read_text()
+    assert "${CLAUDE_SKILL_DIR}/references/schedule.md" in (CLAUDE / "SKILL.md").read_text()
+    for path in (HERMES / "routine-log" / "SKILL.md", CLAUDE / "SKILL.md"):
+        assert "--keep-notes" in path.read_text()
 
 
 def test_claude_skill_frontmatter():
@@ -3377,13 +3577,15 @@ python3 ${HERMES_SKILL_DIR}/../scripts/routine.py item list
 - One message can mean several commands: "took A and B" is two `done`.
 - The user skipped on purpose ("too tired, no laundry today"): `skip`. Not doing it is not the same as skipping; don't skip for them.
 - "Remember to X next time I do Y": `note add "Y" "X"`.
-- `notes_resolved:` after `done`: these were reminders for this task. Ask the user whether they got done.
+- `notes_resolved:` after `done`: these were reminders for this task. Ask the user whether they got done. If the user says the reminder is for a later time, pass `--keep-notes` so `done` leaves it open.
 
 ## Reading `time`
 
 - `due`, `makeup`: it should be done now. `makeup` means a scheduled day just passed and there is still time.
 - `missed`: a scheduled day passed without it. Doing it once settles every missed day; never tell the user they owe several.
+- `still due …` after `done`: one more scheduled day is still open (two scheduled days close together).
 - `next …`, `no schedule`, `never done`, `last done … (N days ago)`: facts, not judgments. Choose your own tone.
+- `schedule:` lines after `done` say which scheduled day it counted for. How days are matched: `${HERMES_SKILL_DIR}/references/schedule.md`.
 - `note #N`: a reminder for that item; mention it.
 
 ## Errors
@@ -3522,13 +3724,15 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/routine.py item list
 - One message can mean several commands: "took A and B" is two `done`.
 - The user skipped on purpose ("too tired, no laundry today"): `skip`. Not doing it is not the same as skipping; don't skip for them.
 - "Remember to X next time I do Y": `note add "Y" "X"`.
-- `notes_resolved:` after `done`: these were reminders for this task. Ask the user whether they got done.
+- `notes_resolved:` after `done`: these were reminders for this task. Ask the user whether they got done. If the user says the reminder is for a later time, pass `--keep-notes` so `done` leaves it open.
 
 ## Reading `time`
 
 - `due`, `makeup`: it should be done now. `makeup` means a scheduled day just passed and there is still time.
 - `missed`: a scheduled day passed without it. Doing it once settles every missed day; never tell the user they owe several.
+- `still due …` after `done`: one more scheduled day is still open (two scheduled days close together).
 - `next …`, `no schedule`, `never done`, `last done … (N days ago)`: facts, not judgments. Choose your own tone.
+- `schedule:` lines after `done` say which scheduled day it counted for. How days are matched: `${CLAUDE_SKILL_DIR}/references/schedule.md`.
 - `note #N`: a reminder for that item; mention it.
 
 ## Errors
@@ -3603,12 +3807,33 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/routine.py export [--file "<path>.json"]
 - For one day's overview, use `time <date>` instead.
 ````
 
-- [ ] **Step 10: 跑測試確認通過**
+- [ ] **Step 10: 寫排程規則參考檔**
+
+`src/routine-keeper/hermes/routine-log/references/schedule.md` 與 `src/routine-keeper/claude/references/schedule.md` 內容相同（不含任何指令路徑）：
+
+```markdown
+# How scheduled days are matched
+
+Read this when a `schedule:` line or a `time` status needs explaining.
+
+- `daily`: done or not done each day. A dose can be logged once per day.
+- `none`: nothing is due; only the last time is shown.
+- `interval:N`: due N days after the last time it was done. Doing it early or late only moves the next due date; nothing piles up. `done` says how many days before or after the plan it was.
+- `weekly:wed,sat`: each scheduled day has a window (default 1 day early, 2 days late).
+  - A completion counts for the earliest open scheduled day whose window holds it, so making up a past day comes before doing the next one early.
+  - It also settles every other open scheduled day before it ("merged"): doing it once clears what was missed.
+  - Outside every window, it only settles earlier missed days; with none it is "extra" and changes nothing.
+  - Days the user skipped on purpose (`skip`) are never counted as missed or merged.
+- The day a record counts for comes from the day boundary (default 05:00) unless `--for` names the day.
+- Changing an item's schedule or window judges the new rule from that day on.
+```
+
+- [ ] **Step 11: 跑測試確認通過**
 
 Run: `uv run pytest tests/test_routine_skills.py -v`
 Expected: 全部 PASS
 
-- [ ] **Step 11: Commit**
+- [ ] **Step 12: Commit**
 
 ```bash
 git add src/routine-keeper/hermes src/routine-keeper/claude tests/test_routine_skills.py
@@ -3654,7 +3879,8 @@ def test_zips_hold_each_agents_layout(tmp_path):
             "routine-keeper/scripts/routine.py", "routine-keeper/scripts/routine_core/schedule.py"} <= hermes
     claude = set(zipfile.ZipFile(tmp_path / "routine-keeper-claude.zip").namelist())
     assert {"routine-keeper/SKILL.md", "routine-keeper/references/setup.md",
-            "routine-keeper/scripts/routine.py"} <= claude
+            "routine-keeper/references/schedule.md", "routine-keeper/scripts/routine.py"} <= claude
+    assert "routine-keeper/routine-log/references/schedule.md" in hermes
     for names in (hermes, claude):
         assert not [n for n in names if "__pycache__" in n or n.endswith((".pyc", "config.json"))
                     or "/data/" in n or ".DS_Store" in n]
@@ -3878,6 +4104,13 @@ rm -rf build
 Run: `git status --short`
 Expected: 沒有輸出（`build/` 在 gitignore，`data/`、`config.json` 不應出現在 `src/`）
 
-- [ ] **Step 6: 回報**
+- [ ] **Step 6: 回報並交接**
 
 回報測試數量、隱私檢查結果、煙霧測試輸出。push、開 PR、打 tag 發 release 都要先問使用者。
+
+交接時列出下面這些**還沒做、需要使用者參與**的事（spec「發布流程」第 2–5 步與「後續待辦」）：
+
+1. 本機安裝 Hermes 版（`uv run tools/package.py routine-keeper` 後 `cp -R build/hermes/routine-keeper ~/.hermes/skills/`，覆蓋不刪），用真實對話測試：記錄、補記（`--at`）、查某天、跨夜、新增項目並轉述 `confirm:`、`note` 與 `notes_resolved`、`data move`。發現問題就回頭改輸出或 SKILL.md、補測試、重新打包。
+2. 同樣測一次 Claude Code 版（`cp -R build/claude/routine-keeper ~/.claude/skills/`）。
+3. 使用者同意後 push 分支、開 PR；合併後打 `routine-keeper-v1.0.0` tag 觸發 release。
+4. **提醒使用者：weatherwise 要改成同樣的 skill 架構**（Hermes 分類結構加 `DESCRIPTION.md`、Claude 單一 skill、兩套手寫、release 兩個 zip），因為它的 description 在 Hermes 索引裡被截到 57 字元。
