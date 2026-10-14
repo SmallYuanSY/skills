@@ -242,8 +242,9 @@ chores:
 
 `done` 範例：
 ```
-ok: logged Laundry for 2026-10-15 (Wed) at 2026-10-15 18:20
-schedule: Wed 2026-10-15 done; Sat 2026-10-11 merged
+ok: logged #42 Laundry for 2026-10-14 (Wed) at 2026-10-14 18:20
+schedule: counts for Wed 2026-10-14 (on the day)
+schedule: Sat 2026-10-10 merged into this
 notes_resolved: #3 wash the jacket
 ```
 
