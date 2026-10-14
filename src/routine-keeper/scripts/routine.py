@@ -104,6 +104,15 @@ def build_parser() -> Parser:
     cset = config.add_parser("set")
     cset.add_argument("key", choices=["day-boundary", "timezone"])
     cset.add_argument("value")
+    data = sub.add_parser("data").add_subparsers(dest="sub", required=True, parser_class=Parser)
+    data.add_parser("where")
+    move = data.add_parser("move")
+    move.add_argument("--to", required=True)
+    how = move.add_mutually_exclusive_group()
+    how.add_argument("--use-existing", action="store_true")
+    how.add_argument("--overwrite", action="store_true")
+
+    sub.add_parser("export").add_argument("--file")
     return p
 
 
@@ -123,6 +132,7 @@ HANDLERS = {
     ("note", "list"): cmd_logs.note_list,
     ("note", "resolve"): cmd_logs.note_resolve,
     ("time", None): cmd_time.time_day,
+    ("export", None): cmd_admin.export,
     ("config", "show"): cmd_admin.config_show,
     ("config", "set"): cmd_admin.config_set,
 }
