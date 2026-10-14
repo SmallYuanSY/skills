@@ -35,7 +35,7 @@ unzip routine-keeper-hermes.zip -d ~/.hermes/skills/
 unzip routine-keeper-claude.zip -d ~/.claude/skills/
 ```
 
-It needs Python 3.10+ and nothing else. Its settings (`config.json`) and records (`data/`) live inside the skill folder, so **to upgrade, unzip over the existing folder; never delete it first.** Ask your agent to move the data elsewhere (`data move`) if you'd rather keep it outside.
+It needs Python 3.9+ (the `python3` that ships with macOS works) and nothing else. Its settings (`config.json`) and records (`data/`) live inside the skill folder, so **to upgrade, unzip over the existing folder; never delete it first.** Ask your agent to move the data elsewhere (`data move`) if you'd rather keep it outside.
 
 ## Setup
 

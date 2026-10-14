@@ -50,7 +50,7 @@ tests/test_routine_*.py
 
 - `scripts/` 只有一份。release workflow 把它分別複製進 `hermes/` 和 `claude/` 的組裝結果，打包成 `routine-keeper-hermes.zip` 和 `routine-keeper-claude.zip`，附在 GitHub release 上。這是組裝，不做任何文字轉換。
 - weatherwise 的 `tools/translate.py` 和 `dist/` 流程不受影響。
-- Python 3.10 以上，只用標準函式庫（`sqlite3`、`zoneinfo`、`argparse`、`json`），零依賴。指令寫成 `python3 .../routine.py`，不需要 `uv`。
+- Python 3.9 以上（macOS 內建的 `python3` 就是 3.9），只用標準函式庫（`sqlite3`、`zoneinfo`、`argparse`、`json`），零依賴。指令寫成 `python3 .../routine.py`，不需要 `uv`。
 
 ### 安裝後的樣子
 

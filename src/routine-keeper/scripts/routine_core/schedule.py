@@ -1,4 +1,6 @@
 """Schedule rules, and how completions settle weekly scheduled days. Pure: no database, no clock."""
+from __future__ import annotations
+
 import re
 from dataclasses import dataclass, field
 from datetime import date, timedelta

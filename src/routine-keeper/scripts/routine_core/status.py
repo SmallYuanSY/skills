@@ -1,4 +1,6 @@
 """Where an item stands on a given day. Pure: no database, no clock."""
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 

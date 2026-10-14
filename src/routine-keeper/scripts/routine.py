@@ -18,6 +18,20 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+
+def python_problem(version):
+    """Checked before routine_core is imported, so an old Python gets error/action lines, not a traceback."""
+    if tuple(version[:2]) >= (3, 9):
+        return None
+    found = f"{version[0]}.{version[1]}"
+    return (f"error: python_too_old (Python {found}; routine-keeper needs 3.9 or newer)\n"
+            "action: tell the user routine-keeper needs Python 3.9 or newer; nothing was saved")
+
+
+if __name__ == "__main__" and python_problem(sys.version_info):
+    print(python_problem(sys.version_info))
+    sys.exit(1)
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from routine_core import REPO, VERSION, cmd_admin, cmd_items, cmd_logs, cmd_time, storage  # noqa: E402

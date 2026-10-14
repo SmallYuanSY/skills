@@ -1,4 +1,6 @@
 """Tracked items (chores and doses), their names, aliases, and schedules."""
+from __future__ import annotations
+
 import unicodedata
 
 from .errors import RkError

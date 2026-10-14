@@ -1,4 +1,6 @@
 """time today | yesterday | YYYY-MM-DD"""
+from __future__ import annotations
+
 from datetime import date
 
 from .cmd_logs import item_status

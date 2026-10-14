@@ -1,4 +1,6 @@
 """Completions, skips, and fixes to past records. Deletes are soft and can be undone."""
+from __future__ import annotations
+
 from datetime import date
 
 from .dates import day_of
