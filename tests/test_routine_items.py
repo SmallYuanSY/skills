@@ -35,6 +35,12 @@ def test_names_ignore_case_and_extra_spaces(root, capsys):
     assert code == 2 and out.startswith("error: name_taken")
 
 
+def test_names_match_full_width_letters(root, capsys):
+    run(root, capsys, "item", "add", "--kind", "dose", "--name", "VitD")
+    code, out = run(root, capsys, "item", "edit", "ＶｉｔＤ", "--slot", "bedtime")
+    assert code == 0 and "slot: bedtime" in out
+
+
 def test_alias_cannot_take_another_items_name(root, capsys):
     run(root, capsys, "item", "add", "--kind", "chore", "--name", "Laundry")
     code, out = run(root, capsys, "item", "add", "--kind", "chore", "--name", "Sheets", "--alias", "laundry")

@@ -52,8 +52,8 @@ def skip_days(conn, item_id: int) -> dict:
     return {date.fromisoformat(r["for_date"]): r["reason"] for r in rows}
 
 
-def add_skip(conn, item, *, for_date, reason, now, today) -> bool:
-    check_not_future(None, for_date, now, today)
+def add_skip(conn, item, *, for_date, reason, now) -> bool:
+    """Unlike logs, a skip may be planned ahead ("away on Saturday")."""
     if for_date in skip_days(conn, item["id"]):
         return False
     conn.execute("INSERT INTO skips(item_id, for_date, reason, created_at) VALUES (?, ?, ?, ?)",

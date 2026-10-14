@@ -93,7 +93,7 @@ def skip(ctx: Ctx, a) -> Result:
         text = (f"ok: {item['name']} is no longer skipped on {short_day(day)}" if changed
                 else f"ok: {item['name']} was not skipped on {short_day(day)}")
     else:
-        changed = add_skip(ctx.conn, item, for_date=day, reason=a.reason, now=ctx.now, today=ctx.today)
+        changed = add_skip(ctx.conn, item, for_date=day, reason=a.reason, now=ctx.now)
         text = (f"ok: skipped {item['name']} on {short_day(day)}" + (f" ({a.reason})" if a.reason else "")
                 if changed else f"ok: {item['name']} was already skipped on {short_day(day)}")
     return Result([text], {"ok": True, "item": item["name"], "for_date": day.isoformat(), "changed": changed,

@@ -154,8 +154,18 @@ def test_skip(root, capsys):
     assert code == 2 and out.startswith("error: not_scheduled")
     code, out = run(root, capsys, "skip", "Bed sheets", "--for", "2026-10-14")
     assert code == 2 and out.startswith("error: skip_not_applicable")
-    code, out = run(root, capsys, "skip", "Vitamin D", "--for", "2026-10-15")
-    assert code == 2 and out.startswith("error: future_time")
+
+
+def test_skip_ahead_of_time(root, capsys):
+    setup_items(root, capsys)
+    code, out = run(root, capsys, "skip", "Laundry", "--for", "2026-10-17", "--reason", "away")
+    assert (code, out) == (0, "ok: skipped Laundry on Sat 2026-10-17 (away)")
+    assert run(root, capsys, "skip", "Vitamin D", "--for", "2026-10-15")[0] == 0
+    out = run(root, capsys, "time", "2026-10-15")[1]
+    assert "- Vitamin D [daily, after breakfast]: skipped" in out
+    run(root, capsys, "done", "Laundry")
+    out = run(root, capsys, "time", "2026-10-15")[1]
+    assert "- Laundry [weekly:wed,sat]: next Wed 2026-10-21 (in 6 days)" in out
 
 
 def test_log_list_edit_delete_restore(root, capsys):

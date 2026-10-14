@@ -33,6 +33,7 @@ python3 ${HERMES_SKILL_DIR}/../scripts/routine.py item list
 - If it happened earlier, pass `--at` with the real time. The day it counts for comes from the day boundary (default 05:00, so 2 a.m. counts for the night before). Use `--for` only when the user names the day.
 - One message can mean several commands: "took A and B" is two `done`.
 - The user skipped on purpose ("too tired, no laundry today"): `skip`. Not doing it is not the same as skipping; don't skip for them.
+- `skip` also works ahead of time ("I'm away Saturday, skip laundry"); the next due day then passes over it.
 - "Remember to X next time I do Y": `note add "Y" "X"`.
 - `notes_resolved:` after `done`: these were reminders for this task. Ask the user whether they got done. If a reminder shown by `time` is for a later time, pass `--keep-notes` on that `done`. If one was already resolved but the user says it is still for later, add it again with `note add`.
 

@@ -1,4 +1,6 @@
 """Tracked items (chores and doses), their names, aliases, and schedules."""
+import unicodedata
+
 from .errors import RkError
 from .schedule import describe, format_schedule, parse_schedule, parse_window
 
@@ -14,7 +16,7 @@ def _clean(text: str, what: str = "name") -> str:
 
 
 def _key(text: str) -> str:
-    return " ".join(text.split()).casefold()
+    return " ".join(unicodedata.normalize("NFKC", text).split()).casefold()
 
 
 def _owner(conn, key: str) -> int | None:

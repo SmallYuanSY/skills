@@ -88,6 +88,11 @@ def test_weekly_skipped_today():
     assert (st.state, st.ref) == ("skipped", d("2026-10-14"))
 
 
+def test_weekly_next_day_passes_over_days_skipped_ahead():
+    st = ds(WED_SAT, ["2026-10-14"], "2026-10-15", skips=["2026-10-17"])
+    assert (st.state, st.ref) == ("upcoming", d("2026-10-21"))
+
+
 def test_weekly_only_missed():
     # weekly:mon only, nothing pending on Thu 10-08 after missing Mon 10-05
     st = ds(Schedule("weekly", days=(0,)), [], "2026-10-08", start=d("2026-10-05"))

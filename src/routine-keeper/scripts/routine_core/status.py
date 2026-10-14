@@ -15,9 +15,9 @@ class DayStatus:
     also_due: date | None = None  # weekly: done today, yet a scheduled day is still open (e.g. fri,sat)
 
 
-def _next_weekly(after: date, days: tuple[int, ...]) -> date:
+def _next_weekly(after: date, days: tuple[int, ...], skips: set[date]) -> date:
     d = after + timedelta(days=1)
-    while d.weekday() not in days:
+    while d.weekday() not in days or d in skips:
         d += timedelta(days=1)
     return d
 
@@ -55,4 +55,4 @@ def day_status(sch: Schedule, early: int, late: int, start: date, done_days: lis
     # every scheduled day up to q + early is settled, so the next one comes after that,
     # and never before the day the current rule started
     after = max(q + timedelta(days=early), start - timedelta(days=1))
-    return DayStatus("upcoming", ref=_next_weekly(after, sch.days), last_done=last)
+    return DayStatus("upcoming", ref=_next_weekly(after, sch.days, skips), last_done=last)
