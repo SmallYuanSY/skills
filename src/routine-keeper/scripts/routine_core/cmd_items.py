@@ -28,7 +28,7 @@ def item_pause(ctx: Ctx, a) -> Result:
 
 
 def item_resume(ctx: Ctx, a) -> Result:
-    item = set_active(ctx.conn, a.item, True, ctx.now)
+    item = set_active(ctx.conn, a.item, True, ctx.now, ctx.today)
     return _confirmed(ctx, item, f"ok: resumed {item['name']}")
 
 

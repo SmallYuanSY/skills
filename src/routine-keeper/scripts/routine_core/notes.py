@@ -31,8 +31,10 @@ def resolve_note(conn, note_id: int, now):
     return row
 
 
-def resolve_for_item(conn, item_id: int, log_id: int, now):
-    rows = open_notes(conn, item_id)
-    conn.execute("UPDATE notes SET resolved_at=?, resolved_by_log=? WHERE item_id=? AND resolved_at IS NULL",
-                 (now.isoformat(timespec="seconds"), log_id, item_id))
+def resolve_for_item(conn, item_id: int, log_id: int, for_date, now):
+    """Resolve the reminders written on or before the logged day; a backdated log leaves newer ones open."""
+    rows = [n for n in open_notes(conn, item_id) if n["created_at"][:10] <= for_date.isoformat()]
+    for n in rows:
+        conn.execute("UPDATE notes SET resolved_at=?, resolved_by_log=? WHERE id=?",
+                     (now.isoformat(timespec="seconds"), log_id, n["id"]))
     return rows

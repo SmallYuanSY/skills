@@ -91,3 +91,10 @@ def test_every_documented_command_exists(capsys):
         argv = [cmd] + ([sub] if sub else []) + ["--help"]
         assert routine.main(argv) == 0, argv
     capsys.readouterr()
+
+
+def test_keep_notes_advice_comes_before_done():
+    for path in (HERMES / "routine-log" / "SKILL.md", CLAUDE / "SKILL.md"):
+        text = path.read_text(encoding="utf-8")
+        assert "so `done` leaves it open" not in text, path   # too late: done already resolved it
+        assert "add it again with `note add`" in text, path

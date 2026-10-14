@@ -21,7 +21,7 @@ def item_status(ctx: Ctx, item, q: date) -> DayStatus:
 def _offset_text(offset: int) -> str:
     if offset == 0:
         return "on the day"
-    return f"{plural(abs(offset), 'day')} {'early' if offset < 0 else 'late'}"
+    return f"{plural(abs(offset), 'day')} {'early' if offset < 0 else 'after'}"
 
 
 def _settlement_of(ctx: Ctx, item, log_id: int, for_date: date):
@@ -71,7 +71,7 @@ def done(ctx: Ctx, a) -> Result:
                      today=ctx.today)
     lines = [f"ok: logged #{log_id} {item['name']} for {long_day(for_date)} at {at:%Y-%m-%d %H:%M}"]
     lines += _schedule_lines(ctx, item, log_id, for_date)
-    resolved = [] if a.keep_notes else resolve_for_item(ctx.conn, item["id"], log_id, ctx.now)
+    resolved = [] if a.keep_notes else resolve_for_item(ctx.conn, item["id"], log_id, for_date, ctx.now)
     lines += [f"notes_resolved: #{n['id']} {n['text']}" for n in resolved]
     data = {"ok": True, "log": {"id": log_id, "item": item["name"], "for_date": for_date.isoformat(),
                                 "at": at.isoformat(timespec="minutes")},

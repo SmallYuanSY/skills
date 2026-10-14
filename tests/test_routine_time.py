@@ -115,3 +115,20 @@ def test_time_json(root, capsys):
         "name": "Vitamin D", "kind": "dose", "schedule": "daily", "slot": None, "state": "done", "ref": None,
         "last_done": "2026-10-14", "missed": [], "done_times": ["10:42"], "also_due": None, "notes": [],
         "text": "done 10:42"}
+
+
+def test_a_paused_stretch_is_not_counted_as_missed(root, capsys):
+    run(root, capsys, "item", "add", "--kind", "chore", "--name", "Laundry", "--schedule", "weekly:wed,sat",
+        now=at_tpe("2026-08-01 09:00"))
+    run(root, capsys, "item", "pause", "Laundry", now=at_tpe("2026-08-02 09:00"))
+    run(root, capsys, "item", "resume", "Laundry")
+    out = run(root, capsys, "time", "today")[1]
+    assert "- Laundry [weekly:wed,sat]: due today" in out.splitlines()
+
+
+def test_due_on_a_day_that_is_not_today(root, capsys):
+    run(root, capsys, "item", "add", "--kind", "chore", "--name", "Laundry", "--schedule", "weekly:tue",
+        now=at_tpe("2026-10-01 09:00"))
+    run(root, capsys, "done", "Laundry", "--at", "2026-10-06 18:00")
+    out = run(root, capsys, "time", "yesterday")[1]
+    assert "- Laundry [weekly:tue]: due on the day | last done 2026-10-06 (7 days ago)" in out.splitlines()

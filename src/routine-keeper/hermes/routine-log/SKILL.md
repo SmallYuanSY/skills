@@ -34,7 +34,7 @@ python3 ${HERMES_SKILL_DIR}/../scripts/routine.py item list
 - One message can mean several commands: "took A and B" is two `done`.
 - The user skipped on purpose ("too tired, no laundry today"): `skip`. Not doing it is not the same as skipping; don't skip for them.
 - "Remember to X next time I do Y": `note add "Y" "X"`.
-- `notes_resolved:` after `done`: these were reminders for this task. Ask the user whether they got done. If the user says the reminder is for a later time, pass `--keep-notes` so `done` leaves it open.
+- `notes_resolved:` after `done`: these were reminders for this task. Ask the user whether they got done. If a reminder shown by `time` is for a later time, pass `--keep-notes` on that `done`. If one was already resolved but the user says it is still for later, add it again with `note add`.
 
 ## Reading `time`
 

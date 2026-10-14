@@ -12,7 +12,7 @@ from .status import DayStatus
 MISSED_LIST_MAX = 3
 
 
-def state_text(st: DayStatus, q: date, times: list[str], skip_reason: str | None) -> str:
+def state_text(st: DayStatus, q: date, times: list[str], skip_reason: str | None, today: date) -> str:
     s = st.state
     if s == "done":
         text = "done " + ", ".join(times)
@@ -28,7 +28,7 @@ def state_text(st: DayStatus, q: date, times: list[str], skip_reason: str | None
         text = f"next {short_day(st.ref)} ({ago(st.ref, q)})"
     elif s == "due":
         if st.ref == q:
-            text = "due today"
+            text = "due today" if q == today else "due on the day"
         elif st.ref < q:
             text = f"due since {short_day(st.ref)} ({plural((q - st.ref).days, 'day')})"
         else:
@@ -66,7 +66,7 @@ def time_day(ctx: Ctx, a) -> Result:
         for item in items:
             st = item_status(ctx, item, q)
             times = [r["at"][11:16] for r in logs_on(ctx.conn, item["id"], q)]
-            text = state_text(st, q, times, skip_days(ctx.conn, item["id"]).get(q))
+            text = state_text(st, q, times, skip_days(ctx.conn, item["id"]).get(q), ctx.today)
             label = item["schedule"] + (f", {item['slot']}" if item["slot"] else "")
             lines.append(f"- {item['name']} [{label}]: {text}")
             notes = open_notes(ctx.conn, item["id"])

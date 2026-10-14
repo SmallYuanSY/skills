@@ -213,3 +213,18 @@ def test_done_json(root, capsys):
     data = json.loads(out)
     assert data["log"]["id"] == 1 and data["log"]["for_date"] == "2026-10-14"
     assert data["notes_resolved"] == [{"id": 1, "text": "wash the jacket"}]
+
+
+def test_done_reports_offsets_without_the_word_late(root, capsys):
+    run(root, capsys, "item", "add", "--kind", "chore", "--name", "Mop", "--schedule", "weekly:sat",
+        now=at_tpe("2026-10-07 09:00"))
+    code, out = run(root, capsys, "done", "Mop", "--at", "2026-10-12 10:00")
+    assert out.splitlines()[1] == "schedule: counts for Sat 2026-10-10 (2 days after)"
+
+
+def test_a_backdated_done_keeps_newer_reminders(root, capsys):
+    setup_items(root, capsys)
+    run(root, capsys, "note", "add", "Laundry", "wash the jacket")
+    code, out = run(root, capsys, "done", "Laundry", "--at", "2026-10-10 18:00")
+    assert "notes_resolved" not in out
+    assert "#1 Laundry: wash the jacket" in run(root, capsys, "note", "list")[1]

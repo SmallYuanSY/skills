@@ -100,10 +100,13 @@ def edit_item(conn, ref, *, name=None, schedule=None, window=None, slot=None, ad
     return item
 
 
-def set_active(conn, ref, active: bool, now):
+def set_active(conn, ref, active: bool, now, today=None):
+    """Resuming judges the schedule from today on, so the paused stretch never counts as missed."""
     item = find_item(conn, ref)
     conn.execute("UPDATE items SET active=?, updated_at=? WHERE id=?",
                  (int(active), now.isoformat(timespec="seconds"), item["id"]))
+    if active and not item["active"] and today is not None:
+        conn.execute("UPDATE items SET start_date=? WHERE id=?", (today.isoformat(), item["id"]))
     return _get(conn, item["id"])
 
 
