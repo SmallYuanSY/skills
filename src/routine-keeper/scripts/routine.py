@@ -20,7 +20,7 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from routine_core import REPO, VERSION, cmd_admin, cmd_items, storage  # noqa: E402
+from routine_core import REPO, VERSION, cmd_admin, cmd_items, cmd_logs, storage  # noqa: E402
 from routine_core.context import Ctx, Result  # noqa: E402
 from routine_core.dates import system_timezone  # noqa: E402
 from routine_core.errors import RkError, error_data, render_error  # noqa: E402
@@ -59,6 +59,44 @@ def build_parser() -> Parser:
     lst.add_argument("--kind", choices=["chore", "dose"])
     lst.add_argument("--all", action="store_true")
 
+    d = sub.add_parser("done")
+    d.add_argument("item")
+    d.add_argument("--at")
+    d.add_argument("--for", dest="for_day")
+    d.add_argument("--note")
+    d.add_argument("--keep-notes", action="store_true")
+    d.add_argument("--force", action="store_true")
+
+    s = sub.add_parser("skip")
+    s.add_argument("item")
+    s.add_argument("--for", dest="for_day", required=True)
+    s.add_argument("--reason")
+    s.add_argument("--undo", action="store_true")
+
+    log = sub.add_parser("log").add_subparsers(dest="sub", required=True, parser_class=Parser)
+    ll = log.add_parser("list")
+    ll.add_argument("--item")
+    ll.add_argument("--from", dest="start")
+    ll.add_argument("--to", dest="end")
+    ll.add_argument("--limit", type=int, default=50)
+    le = log.add_parser("edit")
+    le.add_argument("id", type=int)
+    le.add_argument("--at")
+    le.add_argument("--for", dest="for_day")
+    le.add_argument("--note")
+    le.add_argument("--force", action="store_true")
+    log.add_parser("delete").add_argument("id", type=int)
+    lr = log.add_parser("restore")
+    lr.add_argument("id", type=int)
+    lr.add_argument("--force", action="store_true")
+
+    note = sub.add_parser("note").add_subparsers(dest="sub", required=True, parser_class=Parser)
+    na = note.add_parser("add")
+    na.add_argument("item")
+    na.add_argument("text")
+    note.add_parser("list")
+    note.add_parser("resolve").add_argument("id", type=int)
+
     config = sub.add_parser("config").add_subparsers(dest="sub", required=True, parser_class=Parser)
     config.add_parser("show")
     cset = config.add_parser("set")
@@ -73,6 +111,15 @@ HANDLERS = {
     ("item", "pause"): cmd_items.item_pause,
     ("item", "resume"): cmd_items.item_resume,
     ("item", "list"): cmd_items.item_list,
+    ("done", None): cmd_logs.done,
+    ("skip", None): cmd_logs.skip,
+    ("log", "list"): cmd_logs.log_list,
+    ("log", "edit"): cmd_logs.log_edit,
+    ("log", "delete"): cmd_logs.log_delete,
+    ("log", "restore"): cmd_logs.log_restore,
+    ("note", "add"): cmd_logs.note_add,
+    ("note", "list"): cmd_logs.note_list,
+    ("note", "resolve"): cmd_logs.note_resolve,
     ("config", "show"): cmd_admin.config_show,
     ("config", "set"): cmd_admin.config_set,
 }
