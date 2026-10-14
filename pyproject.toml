@@ -12,5 +12,5 @@ package = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["src/weatherwise/scripts", "tools"]
+pythonpath = ["src/weatherwise/scripts", "src/routine-keeper/scripts", "tools"]
 markers = ["live: real network requests (skip with -m 'not live')"]

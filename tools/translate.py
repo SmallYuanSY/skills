@@ -30,21 +30,28 @@ def _skip(path: Path) -> bool:
     return "__pycache__" in path.parts or path.suffix == ".pyc" or path.name == ".DS_Store"
 
 
+def _skill_dirs(src: Path) -> list[Path]:
+    """Only folders with a SKILL.md at their root are translated; others (e.g. hand-written
+    per-agent skills such as routine-keeper) are packaged by tools/package.py instead."""
+    return [d for d in sorted(src.iterdir()) if d.is_dir() and (d / "SKILL.md").is_file()]
+
+
 def _render(src: Path, out: Path) -> None:
     for target, skill_dir in TARGETS.items():
-        for f in sorted(src.rglob("*")):
-            rel = f.relative_to(src)
-            if f.is_dir() or _skip(rel):
-                continue
-            dest = out / target / rel
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            if f.suffix == ".md":
-                text = f.read_text(encoding="utf-8").replace(PLACEHOLDER, skill_dir)
-                if m := LEFTOVER.search(text):
-                    raise TranslateError(f"{rel}: unknown placeholder {m.group(0)}")
-                dest.write_text(text, encoding="utf-8")
-            else:
-                shutil.copy2(f, dest)
+        for skill in _skill_dirs(src):
+            for f in sorted(skill.rglob("*")):
+                rel = f.relative_to(src)
+                if f.is_dir() or _skip(rel):
+                    continue
+                dest = out / target / rel
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                if f.suffix == ".md":
+                    text = f.read_text(encoding="utf-8").replace(PLACEHOLDER, skill_dir)
+                    if m := LEFTOVER.search(text):
+                        raise TranslateError(f"{rel}: unknown placeholder {m.group(0)}")
+                    dest.write_text(text, encoding="utf-8")
+                else:
+                    shutil.copy2(f, dest)
 
 
 def build(src: Path, out: Path) -> None:
