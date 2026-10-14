@@ -20,7 +20,7 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from routine_core import REPO, VERSION, cmd_admin, cmd_items, cmd_logs, storage  # noqa: E402
+from routine_core import REPO, VERSION, cmd_admin, cmd_items, cmd_logs, cmd_time, storage  # noqa: E402
 from routine_core.context import Ctx, Result  # noqa: E402
 from routine_core.dates import system_timezone  # noqa: E402
 from routine_core.errors import RkError, error_data, render_error  # noqa: E402
@@ -73,6 +73,8 @@ def build_parser() -> Parser:
     s.add_argument("--reason")
     s.add_argument("--undo", action="store_true")
 
+    sub.add_parser("time").add_argument("day")
+
     log = sub.add_parser("log").add_subparsers(dest="sub", required=True, parser_class=Parser)
     ll = log.add_parser("list")
     ll.add_argument("--item")
@@ -120,6 +122,7 @@ HANDLERS = {
     ("note", "add"): cmd_logs.note_add,
     ("note", "list"): cmd_logs.note_list,
     ("note", "resolve"): cmd_logs.note_resolve,
+    ("time", None): cmd_time.time_day,
     ("config", "show"): cmd_admin.config_show,
     ("config", "set"): cmd_admin.config_set,
 }
