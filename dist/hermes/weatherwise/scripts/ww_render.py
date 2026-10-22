@@ -71,13 +71,19 @@ def _label(place: Place, country: bool = False) -> str:
     return ", ".join(parts)
 
 
+def _shown_keys(entries: list, detail: bool) -> set[str]:
+    """Alert keys that get a line: those within the per-place cap of at least one place."""
+    return {a.key for e in entries if e[0] is not None and e[2] is not None
+            for a in (e[2].alerts if detail else e[2].alerts[:CAP])}
+
+
 def _alert_lines(entries: list, multi: bool, detail: bool) -> list[str]:
     """One line per alert key; places sharing a key are tagged [i], and per-place variants
     of the same key (rain levels differ between townships) share the line. The per-place cap
     is applied after grouping, so a key shown for one place keeps the tags of the others."""
     rank = lambda a: SEVERITY_RANK.get(a.severity, 9)  # noqa: E731
     live = [(i, e[2]) for i, e in enumerate(entries) if e[0] is not None and e[2] is not None]
-    shown_keys = {a.key for _, pa in live for a in (pa.alerts if detail else pa.alerts[:CAP])}
+    shown_keys = _shown_keys(entries, detail)
     groups: dict[str, list[tuple[int, Alert]]] = {}
     for i, pa in live:
         for a in pa.alerts:
@@ -185,8 +191,10 @@ def render(entries: list[Entry], cyclones: list[tuple[Cyclone, list[int]]], now:
         lines += _status_lines(entries, fetched_at, multi)
 
     # Official OR GDACS, never both: a storm already carried by a place's official alert is not repeated.
+    # (only alerts actually listed count: one cut by the cap must not hide the storm)
+    shown = _shown_keys(entries, detail)
     covered = {(a.cyclone.name, i) for i, (_, _, pa) in enumerate(entries) if pa
-               for a in pa.alerts if a.cyclone is not None}
+               for a in pa.alerts if a.cyclone is not None and a.key in shown}
     standalone = [(c, left) for c, indices in cyclones
                   if (left := [i for i in indices if (c.name, i) not in covered])]
     if standalone:

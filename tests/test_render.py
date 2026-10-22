@@ -212,6 +212,20 @@ def test_storm_merged_for_one_place_is_standalone_for_the_other():
     assert "CHAMPI-26" in cyc and "[2]" in cyc and "[1]" not in cyc
 
 
+def test_capped_out_typhoon_alert_does_not_hide_the_storm():
+    many = [alert(f"ncdr:k{n}", "extreme", f"超大豪雨{n}", "x") for n in range(7)]
+    ty = alert("ncdr:颱風", "severe", "颱風警報", "x", "typhoon", cyclone=CHAMPI)
+    out = go([(BANQIAO, report(), PlaceAlerts("ok", many + [ty]))], [(CHAMPI, [0])])
+    assert "颱風警報" not in out and "+2 more" in out
+    assert "cyclones (track data" in out and "CHAMPI-26 (GDACS Red)" in out
+
+
+def test_polygons_without_track_do_not_claim_a_forecast_distance():
+    c = Cyclone("TEST-26", "Orange", 21.2, 124.9, [], [[(20.0, 124.0), (22.0, 124.0), (22.0, 126.0)]], "")
+    out = go([(BANQIAO, report(), NONE_OK)], [(c, [0])])
+    assert "forecast track unavailable" in out and "forecast closest" not in out
+
+
 def test_variants_with_different_summaries_drop_the_summary_and_expire_latest():
     later = UNTIL + timedelta(hours=3)
     a = alert(severity="severe", title="大豪雨", summary="摘要甲", expires=UNTIL)

@@ -110,7 +110,7 @@ NO_TRACK = "forecast track unavailable"
 
 
 def _has_forecast(c: Cyclone) -> bool:
-    return bool(c.track or c.wind_polygons)  # else "closest" would just be the current distance
+    return bool(c.track)  # closest is measured along the track; polygons only decide matching
 
 
 def describe(c: Cyclone, place: Place) -> str:
