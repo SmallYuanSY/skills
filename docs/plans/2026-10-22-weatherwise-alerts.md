@@ -72,8 +72,8 @@ tests/
 
 ### Task 0: 分支
 
-- [ ] **Step 1：問使用者**。spec 的 commit `745eddc` 不小心落在 `routine-keeper` 分支。問使用者要怎麼處理：(a) 從 `main` 開 `weatherwise-alerts` 分支，cherry-pick `745eddc` 和這份計畫的 commit，再把這兩個 commit 從 `routine-keeper` 移除；(b) 直接在目前的分支上做。**沒得到回答前不要改動 `routine-keeper`。**
-- [ ] **Step 2**：照使用者的回答建立分支，然後執行 `uv run pytest -q -m 'not live'`。預期結果：`264 passed`。
+- [x] **Step 1**：使用者同意後，已從 `main` 開出 `weatherwise-alerts`，放入 spec 和計畫；`routine-keeper` 已還原到 `6529d46`。
+- [x] **Step 2**：在 `weatherwise-alerts` 執行 `uv run pytest -q -m 'not live'`，結果 `95 passed`。
 
 ---
 
