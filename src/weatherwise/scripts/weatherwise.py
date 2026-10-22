@@ -86,6 +86,7 @@ class Paced:
     def __init__(self, cached: Cached):
         self.cached = cached
         self.live = False
+        self.paces = True  # ww_places.localize leaves the pause to us
 
     def __call__(self, url: str, headers: dict | None = None, *, text: bool = False):
         if url.startswith(NOMINATIM_HOST) and not self.cached.is_fresh(url, text):

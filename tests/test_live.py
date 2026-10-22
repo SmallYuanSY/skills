@@ -256,3 +256,11 @@ def test_meteoalarm_germany_shape(polite):
     assert all(a.title and a.key.startswith("meteoalarm:") and (a.expires is None or a.expires.tzinfo) for a in parsed)
     out = ww_alerts_eu.alerts_for([berlin], get, now)
     assert len(out) == 1 and (out[0] is None or isinstance(out[0], list))
+
+
+def test_zh_tw_user_gets_local_language_names_abroad(polite):
+    berlin = geocode("Berlin", "zh-TW", True, get)
+    assert berlin.country_code == "de" and berlin.region == "Berlin"  # what MeteoAlarm's areaDesc says
+    time.sleep(1.1)
+    chiyoda = geocode("千代田区", "zh-TW", True, get)
+    assert chiyoda.country_code == "jp" and chiyoda.locality == "千代田区"

@@ -42,14 +42,31 @@ def resolve_place(query: str | None, cfg: dict, lang: str, global_search: bool, 
     return geocode(query, lang, global_search, http)
 
 
+def localize(place: Place, http) -> Place:
+    """Alert feeds match region/locality/district by name, in the local language (MeteoAlarm "Berlin",
+    JMA 千代田区), so places outside Taiwan get those three fields from a reverse lookup without
+    accept-language. The name stays in the user's language. A failed lookup keeps what we have."""
+    if not place.country_code or place.country_code == "tw":
+        return place
+    if not getattr(http, "paces", False):
+        time.sleep(PAUSE)  # Nominatim allows one request per second
+    try:
+        local = reverse(place.lat, place.lon, None, http)
+    except WwError:
+        return place
+    if local.country_code != place.country_code:
+        return place
+    return replace(place, region=local.region, locality=local.locality, district=local.district)
+
+
 def _with_address(place: Place, lang: str, http) -> Place:
     """Country and region are a bonus for coordinates; without them only alerts are unavailable."""
     try:
         found = reverse(place.lat, place.lon, lang, http)
     except WwError:
         return place
-    return replace(place, country_code=found.country_code, region=found.region, locality=found.locality,
-                   district=found.district)
+    return localize(replace(place, country_code=found.country_code, region=found.region,
+                            locality=found.locality, district=found.district), http)
 
 
 def _is_district(r: dict, query: str) -> bool:
@@ -102,13 +119,14 @@ def geocode(query: str, lang: str, global_search: bool, http) -> Place:
                 r = _district_by_suffix(query, params, res[0], http) or r
             parts = [p.strip() for p in r["display_name"].split(",")]
             name = ", ".join(p for p in parts if not p.isdigit())
-            return Place(name, float(r["lat"]), float(r["lon"]), **_address_fields(r))
+            return localize(Place(name, float(r["lat"]), float(r["lon"]), **_address_fields(r)), http)
     raise WwError("place_not_found", query)
 
 
-def reverse(lat: float, lon: float, lang: str, http) -> Place:
+def reverse(lat: float, lon: float, lang: str | None, http) -> Place:
+    """lang None asks without accept-language, which makes Nominatim answer in the place's own language."""
     q = urllib.parse.urlencode({"format": "json", "addressdetails": 1, "zoom": 14, "lat": lat, "lon": lon,
-                                "accept-language": lang})
+                                **({"accept-language": lang} if lang else {})})
     r = _get(http, f"{NOMINATIM_REVERSE}?{q}", "nominatim")
     return Place(f"{lat},{lon}", lat, lon, **_address_fields(r if isinstance(r, dict) else {}))
 

@@ -4,6 +4,7 @@ import ww_places
 
 from conftest import TAIPEI_DEFAULT, FakeHttp
 from ww_errors import WwError
+from ww_http import HttpError
 from ww_model import Place
 from ww_config import load_config
 from ww_places import NOMINATIM, NOMINATIM_REVERSE, OPEN_METEO, geocode, resolve_place, with_timezone
@@ -136,7 +137,7 @@ def test_township_comes_from_town_in_the_county_case():
 
 
 def test_japan_takes_the_prefecture_from_display_name_when_the_address_has_none():
-    p = geocode("東京都千代田区", "ja", True, FakeHttp({NOMINATIM: CHIYODA}))
+    p = geocode("東京都千代田区", "ja", True, FakeHttp({NOMINATIM: CHIYODA, NOMINATIM_REVERSE: HttpError(429)}))
     assert (p.country_code, p.region, p.locality) == ("jp", "東京", "千代田区")
 
 
@@ -215,7 +216,7 @@ def test_failed_suffix_retry_keeps_the_first_result():
         if "%E5%8D%80" in url:
             raise HttpError(429)
         return PINGLIN_RESULTS
-    p = geocode("坪林", "zh-TW", False, FakeHttp({NOMINATIM: route}))
+    p = geocode("坪林", "zh-TW", False, FakeHttp({NOMINATIM: route, NOMINATIM_REVERSE: HttpError(429)}))
     assert (p.region, p.locality) == ("苗栗縣", "卓蘭鎮")
 
 
@@ -238,11 +239,11 @@ def test_county_administered_city_has_the_county_as_region():
 def test_district_is_the_county_outside_taiwan_and_none_in_taiwan():
     kreis = {"lat": "53.8", "lon": "10.37", "display_name": "Bad Oldesloe, Kreis Stormarn, Schleswig-Holstein, Deutschland",
              "address": {"town": "Bad Oldesloe", "county": "Kreis Stormarn", "state": "Schleswig-Holstein", "country_code": "de"}}
-    p = geocode("Bad Oldesloe", "en", True, FakeHttp({NOMINATIM: [kreis]}))
+    p = geocode("Bad Oldesloe", "en", True, FakeHttp({NOMINATIM: [kreis], NOMINATIM_REVERSE: HttpError(429)}))
     assert (p.region, p.locality, p.district) == ("Schleswig-Holstein", "Bad Oldesloe", "Kreis Stormarn")
     berlin = {"lat": "52.5", "lon": "13.4", "display_name": "Berlin, Deutschland",
               "address": {"city": "Berlin", "state": "Berlin", "country_code": "de"}}
-    assert geocode("Berlin", "en", True, FakeHttp({NOMINATIM: [berlin]})).district == "Berlin"
+    assert geocode("Berlin", "en", True, FakeHttp({NOMINATIM: [berlin], NOMINATIM_REVERSE: HttpError(429)})).district == "Berlin"
     assert geocode("坪林", "zh-TW", False, FakeHttp({NOMINATIM: PINGLIN_MIXED})).district is None
 
 
@@ -259,5 +260,45 @@ BERLIN_NH = {"class": "boundary", "type": "administrative", "name": "Berlin",
 def test_worldwide_search_keeps_the_importance_order(global_search):
     def route(url):
         return [] if "countrycodes=tw" in url else [BERLIN_DE, BERLIN_NH]
-    p = geocode("Berlin", "en", global_search, FakeHttp({NOMINATIM: route}))
+    p = geocode("Berlin", "en", global_search, FakeHttp({NOMINATIM: route, NOMINATIM_REVERSE: HttpError(429)}))
     assert p.country_code == "de"
+
+
+BERLIN_ZH = {"lat": "52.5", "lon": "13.37", "display_name": "Tiergarten, 柏林, 德國",
+             "address": {"suburb": "Tiergarten", "state": "柏林", "country": "德國", "country_code": "de"}}
+BERLIN_LOCAL = {"lat": "52.5", "lon": "13.37", "display_name": "Tiergarten, Berlin, Deutschland",
+                "address": {"suburb": "Tiergarten", "city": "Berlin", "state": "Berlin", "country_code": "de"}}
+
+
+def test_abroad_fields_come_from_one_reverse_without_accept_language():
+    http = FakeHttp({NOMINATIM: [BERLIN_ZH], NOMINATIM_REVERSE: BERLIN_LOCAL})
+    p = geocode("Berlin", "zh-TW", True, http)
+    reverse_calls = [u for u, _ in http.calls if u.startswith(NOMINATIM_REVERSE)]
+    assert len(reverse_calls) == 1 and "accept-language" not in reverse_calls[0]
+    assert (p.region, p.locality, p.country_code) == ("Berlin", "Tiergarten", "de")
+    assert "柏林" in p.name  # the name stays in the user's language
+
+
+def test_taiwan_search_makes_no_extra_request():
+    http = FakeHttp({NOMINATIM: TAICHUNG})
+    geocode("台中", "zh-TW", False, http)
+    assert len(http.calls) == 1
+
+
+def test_failed_local_lookup_keeps_the_user_language_fields():
+    http = FakeHttp({NOMINATIM: [BERLIN_ZH], NOMINATIM_REVERSE: HttpError(429)})
+    p = geocode("Berlin", "zh-TW", True, http)
+    assert (p.region, p.locality) == ("柏林", "Tiergarten")
+
+
+def test_coordinates_abroad_are_localized_too():
+    http = FakeHttp({NOMINATIM_REVERSE: lambda u: BERLIN_LOCAL if "accept-language" not in u else BERLIN_ZH})
+    p = resolve_place("52.5,13.37", {}, "zh-TW", False, http)
+    assert p.region == "Berlin" and len(http.calls) == 2
+
+
+def test_default_completion_abroad_is_localized(config_dir):
+    cfg = {"default": {"name": "x", "lat": 52.5, "lon": 13.37, "timezone": "Europe/Berlin"}}
+    http = FakeHttp({NOMINATIM_REVERSE: lambda u: BERLIN_LOCAL if "accept-language" not in u else BERLIN_ZH})
+    ensure_default_complete(cfg, config_dir, "zh-TW", http)
+    assert cfg["default"]["region"] == "Berlin"

@@ -6,7 +6,7 @@ from ww_config import KEY_FILE_NAME, ensure_private_dir, mask, resolve_lang, sav
 from ww_errors import WwError
 from ww_http import HttpError
 from ww_model import Place
-from ww_places import resolve_place, reverse, with_timezone
+from ww_places import localize, resolve_place, reverse, with_timezone
 from ww_sources import fetch_weatherkit
 
 # Where the WeatherKit test request asks for weather when no default place is set
@@ -59,6 +59,7 @@ def ensure_default_complete(cfg: dict, d: Path, lang: str, http) -> None:
         return  # try again next run; the weather itself does not need it
     if not found.country_code:
         return
+    found = localize(found, http)
     df.update(country_code=found.country_code, region=found.region, locality=found.locality, district=found.district)
     save_config(d, cfg)
 

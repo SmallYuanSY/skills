@@ -127,3 +127,10 @@ def cache_dir(tmp_path, monkeypatch):
     d = tmp_path / "cache"
     monkeypatch.setenv("WEATHERWISE_CACHE_DIR", str(d))
     return d
+
+
+@pytest.fixture(autouse=True)
+def no_nominatim_pause(request, monkeypatch):
+    """The 1.1 s pauses between Nominatim requests are for the real service."""
+    if "live" not in request.keywords:
+        monkeypatch.setattr("time.sleep", lambda s: None)
