@@ -61,18 +61,44 @@ def test_jma_place_without_warnings_is_empty_not_none():
     assert run([CHUO]) == [[]]
 
 
-def test_jma_special_warning_is_extreme():
-    assert ww_alerts_jp.CODES["33"] == ("大雨特別警報", "rain", "extreme")
-    assert ww_alerts_jp.CODES["08"][2] == "severe" and ww_alerts_jp.CODES["19"][2] == "moderate"
-
-
-def test_jma_unknown_code_is_skipped():
+def with_warnings(warnings):
     data = json.loads(fixture("jma_130000.json"))
-    data["areaTypes"][0]["areas"][0]["warnings"] = [{"code": "99", "status": "発表"}, {"code": "15", "status": "発表"}]
-    h = FakeHttp({ww_alerts_jp.AREA_URL: json.loads(fixture("jma_area.json")),
-                  ww_alerts_jp.WARNING_URL.format("130000"): data})
-    (alerts,) = run([CHIYODA], h)
-    assert [a.key for a in alerts] == ["jma:1310100:15"]
+    data["areaTypes"][0]["areas"][0]["warnings"] = warnings
+    return FakeHttp({ww_alerts_jp.AREA_URL: json.loads(fixture("jma_area.json")),
+                     ww_alerts_jp.WARNING_URL.format("130000"): data})
+
+
+def test_jma_special_warning_is_extreme():
+    (alerts,) = run([CHIYODA], with_warnings([{"code": "33", "status": "発表"}]))
+    assert (alerts[0].title, alerts[0].kind, alerts[0].severity) == ("大雨特別警報", "rain", "extreme")
+
+
+def test_jma_thunder_advisory_is_listed():
+    (alerts,) = run([CHIYODA], with_warnings([{"code": "14", "status": "継続"}]))
+    assert [(a.title, a.kind, a.severity) for a in alerts] == [("雷注意報", "thunder", "moderate")]
+
+
+def test_jma_unknown_code_is_listed_not_dropped():
+    (alerts,) = run([CHIYODA], with_warnings([{"code": "99", "status": "発表"}, {"code": "09", "status": "発表"}]))
+    assert [(a.title, a.kind, a.severity) for a in alerts] == [
+        ("気象注意報 (code 99)", "other", "extreme"), ("気象注意報 (code 09)", "other", "severe")]
+
+
+def test_jma_same_name_in_several_prefectures_is_picked_by_region():
+    area = json.loads(fixture("jma_area.json"))
+    area["offices"]["270000"] = {"name": "大阪府", "parent": "010300"}
+    area["class10s"]["270010"] = {"name": "x", "parent": "270000"}
+    area["class15s"]["270011"] = {"name": "y", "parent": "270010"}
+    area["class20s"]["2712000"] = {"name": "中央区", "parent": "270011"}
+    routes = {ww_alerts_jp.AREA_URL: area, ww_alerts_jp.WARNING_URL.format("130000"): json.loads(fixture("jma_130000.json")),
+              ww_alerts_jp.WARNING_URL.format("270000"): {"reportDatetime": "2026-10-22T10:00:00+09:00", "areaTypes": []}}
+    assert ww_alerts_jp.alerts_for([CHUO], FakeHttp(routes), NOW) == [[]]
+    osaka = Place("中央区", 34.68, 135.52, "Asia/Tokyo", "jp", "大阪", "中央区")
+    no_region = Place("中央区", 34.68, 135.52, "Asia/Tokyo", "jp", None, "中央区")
+    assert ww_alerts_jp.alerts_for([osaka, no_region], FakeHttp(routes), NOW) == [[], None]
+    h = FakeHttp(routes)
+    ww_alerts_jp.alerts_for([osaka], h, NOW)
+    assert [u for u, _ in h.calls][-1].endswith("/270000.json")
 
 
 def test_jma_one_request_per_office_for_two_tokyo_places():

@@ -27,10 +27,20 @@ CODES = {
     "10": ("大雨注意報", "rain", "moderate"),
     "12": ("大雪注意報", "snow", "moderate"),
     "13": ("風雪注意報", "wind", "moderate"),
+    "14": ("雷注意報", "thunder", "moderate"),
     "15": ("強風注意報", "wind", "moderate"),
     "16": ("波浪注意報", "marine", "moderate"),
     "18": ("洪水注意報", "flood", "moderate"),
+    "17": ("融雪注意報", "snowmelt", "moderate"),
     "19": ("高潮注意報", "storm_surge", "moderate"),
+    "20": ("濃霧注意報", "fog", "moderate"),
+    "21": ("乾燥注意報", "dry", "moderate"),
+    "22": ("なだれ注意報", "avalanche", "moderate"),
+    "23": ("低温注意報", "cold", "moderate"),
+    "24": ("霜注意報", "frost", "moderate"),
+    "25": ("着氷注意報", "icing", "moderate"),
+    "26": ("着雪注意報", "snow_accretion", "moderate"),
+    "27": ("その他の注意報", "other", "moderate"),
 }
 
 
@@ -67,14 +77,22 @@ def _match(area: dict, place: Place) -> tuple[str, str] | None:
     return None
 
 
+def _lookup(code: str) -> tuple[str, str, str]:
+    """Known codes by table; an unknown future code is still listed rather than dropped."""
+    if code in CODES:
+        return CODES[code]
+    n = int(code) if code.isdigit() else 10
+    return (f"気象注意報 (code {code})", "other", "extreme" if n >= 30 else "severe" if n < 10 else "moderate")
+
+
 def _alerts(code: str, entries: list[dict], report: dict) -> list[Alert]:
     updated = datetime.fromisoformat(report["reportDatetime"])
     headline = report.get("headlineText") or ""
     out = []
     for w in entries:
-        if w.get("status") in INACTIVE or w.get("code") not in CODES:
+        if w.get("status") in INACTIVE or not w.get("code"):
             continue
-        title, kind, severity = CODES[w["code"]]
+        title, kind, severity = _lookup(w["code"])
         out.append(Alert(kind, severity, title, headline[:LIMIT], headline, None, updated, "jma",
                          f"jma:{code}:{w['code']}"))
     return out
@@ -93,6 +111,7 @@ def alerts_for(places: list[Place], http, now: datetime) -> list[list[Alert] | N
             out.append(None)
             continue
         code, office = m
+        # the file lists only areas that have entries, so a missing class20 means no warnings
         entries = next((a["warnings"] for t in reports[office]["areaTypes"] for a in t["areas"]
                         if a["code"] == code), [])
         out.append(_alerts(code, entries, reports[office]))
