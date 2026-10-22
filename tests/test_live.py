@@ -186,3 +186,27 @@ def test_jma_area_and_tokyo_warning_shape(polite):
                 assert w["code"]
     p = Place("千代田区", 35.694, 139.754, "Asia/Tokyo", "jp", "東京", "千代田区")
     assert ww_alerts_jp.alerts_for([p], get, datetime.now().astimezone())[0] is not None
+
+
+def test_nws_point_shape(polite):
+    import ww_alerts_us
+
+    data = get(ww_alerts_us.URL.format(36.0633, -111.4152), {"Accept": "application/geo+json"})
+    assert isinstance(data["features"], list)
+    for f in data["features"]:
+        p = f["properties"]
+        assert p["id"] and p["event"] and "severity" in p and "description" in p
+    time.sleep(1)
+    p = Place("Flagstaff", 36.0633, -111.4152, "America/Phoenix", "us", "Arizona")
+    assert ww_alerts_us.alerts_for([p], get, datetime.now().astimezone())[0] is not None
+
+
+def test_hko_warnsum_is_a_dict(polite):
+    import ww_alerts_hk
+
+    data = get(ww_alerts_hk.URL)
+    assert isinstance(data, dict)
+    for w in data.values():
+        assert w["name"] and w["updateTime"]
+    hk = Place("香港", 22.32, 114.17, "Asia/Hong_Kong", "hk")
+    assert ww_alerts_hk.alerts_for([hk], get, datetime.now().astimezone())[0] is not None
