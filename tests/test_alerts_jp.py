@@ -113,3 +113,60 @@ def test_jma_one_request_per_office_for_two_tokyo_places():
 def test_jma_collect_integration():
     results, _ = ww_alerts.collect([CHIYODA], http(), NOW)
     assert results[0].status == "ok" and len(results[0].alerts) == 2
+
+
+# Places as Nominatim describes them (locality = ward or town, district = city, region = prefecture);
+# the JMA entries in the fixture are trimmed from the real area.json.
+def place(region, locality, district=None):
+    return Place(locality, 35.0, 135.0, "Asia/Tokyo", "jp", region, locality, district)
+
+
+def area():
+    return json.loads(fixture("jma_area.json"))
+
+
+def match(p):
+    m = ww_alerts_jp._match(area(), p)
+    return m and (m[0], m[1])
+
+
+def test_jma_osaka_ward_is_osaka_city_not_tokyo_kita():
+    assert match(place("大阪府", "北区", "大阪市")) == (["2710000"], "270000")
+    assert match(place("大阪府", "北区")) is None  # never Tokyo's 北区
+
+
+def test_jma_sapporo_ward_is_sapporo_city():
+    assert match(place("北海道", "中央区", "札幌市")) == (["0110000"], "016000")
+
+
+def test_jma_kyoto_ward_falls_back_to_kyoto_city():
+    assert match(place("京都府", "中京区", "京都市")) == (["2610000"], "260000")
+
+
+def test_jma_kobe_ward_matches_city_and_ward_name():
+    assert match(place("兵庫県", "北区", "神戸市")) == (["2810900"], "280000")
+
+
+def test_jma_yokohama_is_kanagawa_never_aomori():
+    m = match(place("神奈川県", "西区", "横浜市"))
+    assert m == (["1410011", "1410012"], "140000")  # JMA splits the city in two; we cannot tell which half
+    assert match(place("神奈川県", "横浜市", "横浜市")) == m
+
+
+def test_jma_tokyo_still_matches_with_full_and_short_prefecture_name():
+    assert match(place("東京都", "千代田区", "千代田区")) == (["1310100"], "130000")
+    assert match(place("東京", "北区")) == (["1311700"], "130000")
+
+
+def test_jma_unknown_prefecture_is_none():
+    assert match(place("どこか県", "千代田区")) is None
+
+
+def test_jma_split_city_lists_each_warning_once():
+    report = {"reportDatetime": "2026-10-22T10:00:00+09:00", "headlineText": "",
+              "areaTypes": [{"areas": [
+                  {"code": "1410011", "warnings": [{"code": "03", "status": "発表"}, {"code": "15", "status": "発表"}]},
+                  {"code": "1410012", "warnings": [{"code": "03", "status": "継続"}]}]}]}
+    h = FakeHttp({ww_alerts_jp.AREA_URL: area(), ww_alerts_jp.WARNING_URL.format("140000"): report})
+    (alerts,) = ww_alerts_jp.alerts_for([place("神奈川県", "西区", "横浜市")], h, NOW)
+    assert sorted(a.title for a in alerts) == ["大雨警報", "強風注意報"]

@@ -5,87 +5,137 @@
    "name": "東京都",
    "enName": "Tokyo",
    "officeName": "気象庁",
-   "parent": "010300",
-   "children": [
-    "130010",
-    "130020",
-    "130030",
-    "130040"
-   ]
+   "parent": "010300"
+  },
+  "270000": {
+   "name": "大阪府",
+   "enName": "Osaka",
+   "officeName": "大阪管区気象台",
+   "parent": "010600"
+  },
+  "016000": {
+   "name": "石狩・空知・後志地方",
+   "enName": "Ishikari Sorachi Shiribeshi",
+   "officeName": "札幌管区気象台",
+   "parent": "010100"
+  },
+  "020000": {
+   "name": "青森県",
+   "enName": "Aomori",
+   "officeName": "青森地方気象台",
+   "parent": "010200"
+  },
+  "140000": {
+   "name": "神奈川県",
+   "enName": "Kanagawa",
+   "officeName": "横浜地方気象台",
+   "parent": "010300"
+  },
+  "260000": {
+   "name": "京都府",
+   "enName": "Kyoto",
+   "officeName": "京都地方気象台",
+   "parent": "010600"
+  },
+  "280000": {
+   "name": "兵庫県",
+   "enName": "Hyogo",
+   "officeName": "神戸地方気象台",
+   "parent": "010600"
   }
  },
  "class10s": {
   "130010": {
    "name": "東京地方",
    "enName": "Tokyo Region",
-   "parent": "130000",
-   "children": [
-    "130011",
-    "130012",
-    "130013",
-    "130014",
-    "130015"
-   ]
+   "parent": "130000"
   },
   "130020": {
    "name": "伊豆諸島北部",
    "enName": "Northern Izu Islands",
-   "parent": "130000",
-   "children": [
-    "130021",
-    "130022"
-   ]
+   "parent": "130000"
   },
   "130030": {
    "name": "伊豆諸島南部",
    "enName": "Southern Izu Islands",
-   "parent": "130000",
-   "children": [
-    "130031",
-    "130032"
-   ]
+   "parent": "130000"
+  },
+  "270000": {
+   "name": "大阪府",
+   "enName": "Osaka Prefecture",
+   "parent": "270000"
+  },
+  "016010": {
+   "name": "石狩地方",
+   "enName": "Ishikari Region",
+   "parent": "016000"
+  },
+  "020030": {
+   "name": "三八上北",
+   "enName": "Sanpachi Kamikita",
+   "parent": "020000"
+  },
+  "140010": {
+   "name": "東部",
+   "enName": "Eastern Region",
+   "parent": "140000"
+  },
+  "260010": {
+   "name": "南部",
+   "enName": "Southern Region",
+   "parent": "260000"
+  },
+  "280010": {
+   "name": "南部",
+   "enName": "Southern Region",
+   "parent": "280000"
   }
  },
  "class15s": {
   "130011": {
    "name": "２３区西部",
    "enName": "Western Region of 23 wards",
-   "parent": "130010",
-   "children": [
-    "1310100",
-    "1310200",
-    "1310300",
-    "1310400",
-    "1310500",
-    "1310900",
-    "1311000",
-    "1311100",
-    "1311200",
-    "1311300",
-    "1311400",
-    "1311500",
-    "1311600",
-    "1311700",
-    "1311900",
-    "1312000"
-   ]
+   "parent": "130010"
   },
   "130021": {
    "name": "大島",
    "enName": "Oshima Island",
-   "parent": "130020",
-   "children": [
-    "1336100"
-   ]
+   "parent": "130020"
   },
   "130031": {
    "name": "八丈島",
    "enName": "Hachijojima Island",
-   "parent": "130030",
-   "children": [
-    "1340100",
-    "1340200"
-   ]
+   "parent": "130030"
+  },
+  "270001": {
+   "name": "大阪市",
+   "enName": "Osaka City",
+   "parent": "270000"
+  },
+  "016012": {
+   "name": "石狩中部",
+   "enName": "Middle Ishikari",
+   "parent": "016010"
+  },
+  "020032": {
+   "name": "上北",
+   "enName": "Kamikita",
+   "parent": "020030"
+  },
+  "140011": {
+   "name": "横浜・川崎",
+   "enName": "Yokohama Kawasaki",
+   "parent": "140010"
+  },
+  "260011": {
+   "name": "京都・亀岡",
+   "enName": "Kyoto Kameoka",
+   "parent": "260010"
+  },
+  "280011": {
+   "name": "阪神",
+   "enName": "Hanshin",
+   "parent": "280010"
   }
  },
  "class20s": {
@@ -112,6 +162,54 @@
    "enName": "Hachijo Town",
    "kana": "はちじょうまち",
    "parent": "130031"
+  },
+  "1311700": {
+   "name": "北区",
+   "enName": "Kita City",
+   "kana": "きたく",
+   "parent": "130011"
+  },
+  "2710000": {
+   "name": "大阪市",
+   "enName": "Osaka City",
+   "kana": "おおさかし",
+   "parent": "270001"
+  },
+  "0110000": {
+   "name": "札幌市",
+   "enName": "Sapporo City",
+   "kana": "さっぽろし",
+   "parent": "016012"
+  },
+  "0240600": {
+   "name": "横浜町",
+   "enName": "Yokohama Town",
+   "kana": "よこはままち",
+   "parent": "020032"
+  },
+  "1410011": {
+   "name": "横浜市北部",
+   "enName": "Northern Yokohama City",
+   "kana": "よこはましほくぶ",
+   "parent": "140011"
+  },
+  "1410012": {
+   "name": "横浜市南部",
+   "enName": "Southern Yokohama City",
+   "kana": "よこはましなんぶ",
+   "parent": "140011"
+  },
+  "2610000": {
+   "name": "京都市",
+   "enName": "Kyoto City",
+   "kana": "きょうとし",
+   "parent": "260011"
+  },
+  "2810900": {
+   "name": "神戸市北区",
+   "enName": "Kobe City Kita Ward",
+   "kana": "こうべしきたく",
+   "parent": "280011"
   }
  }
 }

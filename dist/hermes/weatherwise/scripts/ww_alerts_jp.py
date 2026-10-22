@@ -44,6 +44,19 @@ CODES = {
 }
 
 
+# JIS prefecture code = the first two digits of a class20 code. Matching by code, not by the office
+# name, because Hokkaido and Okinawa offices are named after subregions (石狩・空知・後志地方).
+PREFECTURES = [
+    "北海道", "青森県", "岩手県", "宮城県", "秋田県", "山形県", "福島県", "茨城県", "栃木県", "群馬県",
+    "埼玉県", "千葉県", "東京都", "神奈川県", "新潟県", "富山県", "石川県", "福井県", "山梨県", "長野県",
+    "岐阜県", "静岡県", "愛知県", "三重県", "滋賀県", "京都府", "大阪府", "兵庫県", "奈良県", "和歌山県",
+    "鳥取県", "島根県", "岡山県", "広島県", "山口県", "徳島県", "香川県", "愛媛県", "高知県", "福岡県",
+    "佐賀県", "長崎県", "熊本県", "大分県", "宮崎県", "鹿児島県", "沖縄県",
+]
+JIS = {**{n: f"{i:02d}" for i, n in enumerate(PREFECTURES, 1)},
+       **{n[:-1]: f"{i:02d}" for i, n in enumerate(PREFECTURES, 1)}}  # "東京" as well as "東京都"
+
+
 def _strip(name: str) -> str:
     return name[:-1] if name and name[-1] in SUFFIXES and len(name) > 1 else name
 
@@ -58,22 +71,33 @@ def _office_of(area: dict, code: str) -> str | None:
     return None
 
 
-def _match(area: dict, place: Place) -> tuple[str, str] | None:
-    """(class20 code, office code) for the place's municipality, or None when absent or ambiguous."""
-    if not place.locality:
+def _match(area: dict, place: Place) -> tuple[list[str], str] | None:
+    """(class20 codes, office code) for the place's municipality, or None when absent or ambiguous.
+
+    Only the place's own prefecture is searched: 北区 is in Tokyo, Osaka (as 大阪市) and Kobe. A ward of a
+    designated city may be listed as the city (大阪市), as city+ward (神戸市北区) or as parts of the city
+    (横浜市北部/南部, all returned since we cannot tell which part a ward is in)."""
+    pref = JIS.get((place.region or "").strip())
+    if not pref or not place.locality:
         return None
-    names = area["class20s"]
-    for same in (lambda n: n == place.locality, lambda n: _strip(n) == _strip(place.locality)):
-        found = []
-        for code, v in names.items():
-            if same(v["name"]):
-                office = _office_of(area, code)
-                if office:
-                    found.append((code, office))
-        if len(found) > 1 and place.region:  # e.g. 中央区 exists in several prefectures
-            found = [f for f in found if place.region in area["offices"][f[1]]["name"]]
+    names = {code: v["name"] for code, v in area["class20s"].items() if code[:2] == pref}
+    loc = place.locality
+    city = place.district if place.district and place.district != loc else None
+    whole = [c for c in (city, loc if loc.endswith("市") else None) if c]  # names a part of a city starts with
+    tries = [lambda n: n == loc]
+    if city:
+        tries += [lambda n: n == city + loc, lambda n: n == city]
+    tries += [lambda n: _strip(n) == _strip(loc)]
+    for same in tries:
+        found = [code for code, n in names.items() if same(n)]
         if len(found) == 1:
-            return found[0]
+            office = _office_of(area, found[0])
+            return ([found[0]], office) if office else None
+    for w in whole:
+        found = [code for code, n in names.items() if n.startswith(w)]
+        offices = {_office_of(area, code) for code in found}
+        if found and len(offices) == 1 and None not in offices:
+            return found, offices.pop()
     return None
 
 
@@ -88,10 +112,11 @@ def _lookup(code: str) -> tuple[str, str, str]:
 def _alerts(code: str, entries: list[dict], report: dict) -> list[Alert]:
     updated = datetime.fromisoformat(report["reportDatetime"])
     headline = report.get("headlineText") or ""
-    out = []
+    out, seen = [], set()
     for w in entries:
-        if w.get("status") in INACTIVE or not w.get("code"):
+        if w.get("status") in INACTIVE or not w.get("code") or w["code"] in seen:
             continue
+        seen.add(w["code"])  # a city in several parts lists the same warning per part
         title, kind, severity = _lookup(w["code"])
         out.append(Alert(kind, severity, title, headline[:LIMIT], headline, None, updated, "jma",
                          f"jma:{code}:{w['code']}"))
@@ -110,9 +135,9 @@ def alerts_for(places: list[Place], http, now: datetime) -> list[list[Alert] | N
         if m is None:
             out.append(None)
             continue
-        code, office = m
+        codes, office = m
         # the file lists only areas that have entries, so a missing class20 means no warnings
-        entries = next((a["warnings"] for t in reports[office]["areaTypes"] for a in t["areas"]
-                        if a["code"] == code), [])
-        out.append(_alerts(code, entries, reports[office]))
+        entries = [w for t in reports[office]["areaTypes"] for a in t["areas"] if a["code"] in codes
+                   for w in a["warnings"]]
+        out.append(_alerts(codes[0], entries, reports[office]))
     return out
