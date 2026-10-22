@@ -30,7 +30,7 @@ def ncdr_run(body, ts, d):
 
 def test_rate_limited_ncdr_is_refetched_by_the_next_run(tmp_path):
     first, _ = ncdr_run(RATE_LIMITED, TS, tmp_path)
-    assert first.status == "unavailable"
+    assert first.status == "unavailable" and first.reason == "service_error: ncdr rate limited"
     second, h = ncdr_run(fixture("ncdr.xml"), TS + 120, tmp_path)
     assert second.status == "ok" and ww_alerts_tw.FEED in [u for u, _ in h.calls]
 

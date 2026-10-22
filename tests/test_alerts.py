@@ -77,6 +77,12 @@ def test_reason_for_http_and_ww_errors(monkeypatch):
     monkeypatch.setitem(ww_alerts.PROVIDERS, "tw", ww)
     assert ww_alerts.collect([BANQIAO], None, NOW)[0][0].reason == "network_error"
 
+    def limited(places, http, now):
+        raise WwError("service_error", "ncdr rate limited")
+
+    monkeypatch.setitem(ww_alerts.PROVIDERS, "tw", limited)
+    assert ww_alerts.collect([BANQIAO], None, NOW)[0][0].reason == "service_error: ncdr rate limited"
+
 
 def test_expired_alerts_are_dropped(monkeypatch):
     monkeypatch.setitem(ww_alerts.PROVIDERS, "tw", lambda p, h, n: [[alert("a", expires=-1), alert("b", expires=1)]])

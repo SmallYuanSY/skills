@@ -29,7 +29,7 @@ def _reason(cc: str, e: Exception) -> str:
     if isinstance(e, HttpError):
         return f"{cc} HTTP {e.status}"
     if isinstance(e, WwError):
-        return e.code
+        return f"{e.code}: {e.detail[:80]}" if e.detail else e.code
     return type(e).__name__
 
 
