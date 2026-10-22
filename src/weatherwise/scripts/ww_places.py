@@ -12,6 +12,7 @@ NOMINATIM = "https://nominatim.openstreetmap.org/search"
 NOMINATIM_REVERSE = "https://nominatim.openstreetmap.org/reverse"
 PAUSE = 1.1  # seconds between Nominatim requests of one lookup
 SMALL_PLACES = {"village", "hamlet", "suburb", "neighbourhood", "quarter", "isolated_dwelling"}
+CJK = re.compile(r"[\u3400-\u9fff]")
 ADMIN_SUFFIXES = ("區", "鄉", "鎮", "市", "縣")
 OPEN_METEO = "https://api.open-meteo.com/v1/forecast"
 COORDS = re.compile(r"^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$")
@@ -29,9 +30,9 @@ def resolve_place(query: str | None, cfg: dict, lang: str, global_search: bool, 
         d = cfg.get("default")
         if not d:
             raise WwError("no_default_location")
-        place = Place(d["name"], float(d["lat"]), float(d["lon"]), d.get("timezone"),
-                      d.get("country_code"), d.get("region"), d.get("locality"))
-        return place if place.country_code else _with_address(place, lang, http)
+        # A default without a country is completed by ensure_default_complete, not here (one reverse per run)
+        return Place(d["name"], float(d["lat"]), float(d["lon"]), d.get("timezone"),
+                     d.get("country_code"), d.get("region"), d.get("locality"))
     m = COORDS.match(query)
     if m:
         lat, lon = float(m[1]), float(m[2])
@@ -65,12 +66,18 @@ def _search(params: dict, http) -> list[dict]:
 
 
 def _district_by_suffix(query: str, base: dict, first: dict, http) -> dict | None:
-    """Nominatim may not list the district at all for a bare name; ask for 坪林區, 坪林鄉, ... instead."""
-    if first.get("type") not in SMALL_PLACES or query.endswith(ADMIN_SUFFIXES):
+    """Nominatim may not list the district at all for a bare name; ask for 坪林區, 坪林鄉, ... instead.
+
+    Only for Taiwan-style (CJK) names; a failed retry just means keeping the first result."""
+    if first.get("type") not in SMALL_PLACES or query.endswith(ADMIN_SUFFIXES) or not CJK.search(query):
         return None
     for suffix in ("區", "鄉", "鎮"):
         time.sleep(PAUSE)  # Nominatim allows one request per second
-        for r in _search({**base, "q": query + suffix}, http):
+        try:
+            results = _search({**base, "q": query + suffix}, http)
+        except WwError:
+            return None
+        for r in results:
             if _is_district(r, query):
                 return r
     return None
@@ -86,7 +93,7 @@ def geocode(query: str, lang: str, global_search: bool, http) -> Place:
         res = _search(params, http)
         if res:
             r = _pick(res, query)
-            if not _is_district(r, query):
+            if not global_search and not _is_district(r, query):
                 r = _district_by_suffix(query, params, res[0], http) or r
             parts = [p.strip() for p in r["display_name"].split(",")]
             name = ", ".join(p for p in parts if not p.isdigit())

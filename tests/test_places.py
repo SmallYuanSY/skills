@@ -176,6 +176,17 @@ def test_default_without_country_is_filled_once_and_saved(config_dir):
     assert len(http.calls) == 1
 
 
+def test_failed_ensure_means_exactly_one_reverse_request_per_run(config_dir, monkeypatch, capsys):
+    import weatherwise
+    from conftest import NOW, OPEN_METEO as OM
+    from ww_config import save_config
+    from ww_http import HttpError
+    save_config(config_dir, {"default": {k: v for k, v in TAIPEI_DEFAULT.items() if k != "country_code"}})
+    http = FakeHttp({NOMINATIM_REVERSE: HttpError(429), "https://api.open-meteo.com": OM})
+    weatherwise.run_weather([], http, NOW)
+    assert sum(u.startswith(NOMINATIM_REVERSE) for u, _ in http.calls) == 1
+
+
 def test_default_with_country_makes_no_request():
     d = {**TAIPEI_DEFAULT, "country_code": "tw", "region": "臺北市", "locality": "信義區"}
     place = resolve_place(None, {"default": d}, "zh-TW", False, FakeHttp({}))
@@ -196,3 +207,29 @@ def test_non_string_country_code_in_default_is_rejected(config_dir):
     with pytest.raises(WwError) as e:
         load_config(config_dir)
     assert e.value.code == "config_invalid"
+
+
+def test_failed_suffix_retry_keeps_the_first_result():
+    from ww_http import HttpError
+    def route(url):
+        if "%E5%8D%80" in url:
+            raise HttpError(429)
+        return PINGLIN_RESULTS
+    p = geocode("坪林", "zh-TW", False, FakeHttp({NOMINATIM: route}))
+    assert (p.region, p.locality) == ("苗栗縣", "卓蘭鎮")
+
+
+@pytest.mark.parametrize("query,global_search", [("Springfield", False), ("坪林", True)])
+def test_suffix_retry_only_for_cjk_taiwan_searches(query, global_search):
+    http = FakeHttp({NOMINATIM: PINGLIN_RESULTS})
+    geocode(query, "en", global_search, http)
+    assert len(http.calls) == 1
+
+
+def test_county_administered_city_has_the_county_as_region():
+    # Real answer for 宜蘭市: town + county, no city
+    yilan = [{"class": "boundary", "type": "administrative", "name": "宜蘭市", "display_name": "宜蘭市, 宜蘭縣, 臺灣",
+              "lat": "24.7570", "lon": "121.7530",
+              "address": {"town": "宜蘭市", "county": "宜蘭縣", "country": "臺灣", "country_code": "tw"}}]
+    p = geocode("宜蘭市", "zh-TW", False, FakeHttp({NOMINATIM: yilan}))
+    assert (p.region, p.locality) == ("宜蘭縣", "宜蘭市")

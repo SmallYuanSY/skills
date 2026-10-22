@@ -61,7 +61,8 @@ def test_geocode_in_taiwan(polite):
 
 
 @pytest.mark.parametrize("q,region,locality", [
-    ("坪林", "新北市", "坪林區"), ("礁溪", "宜蘭縣", "礁溪鄉"), ("板橋", "新北市", "板橋區")])
+    ("坪林", "新北市", "坪林區"), ("礁溪", "宜蘭縣", "礁溪鄉"), ("板橋", "新北市", "板橋區"),
+    ("宜蘭市", "宜蘭縣", "宜蘭市")])
 def test_geocode_prefers_the_district_over_a_same_named_village(q, region, locality, polite):
     p = geocode(q, "zh-TW", False, get)
     assert (p.country_code, p.region, p.locality) == ("tw", region, locality)
