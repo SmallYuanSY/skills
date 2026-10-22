@@ -210,3 +210,32 @@ def test_hko_warnsum_is_a_dict(polite):
         assert w["name"] and w["updateTime"]
     hk = Place("香港", 22.32, 114.17, "Asia/Hong_Kong", "hk")
     assert ww_alerts_hk.alerts_for([hk], get, datetime.now().astimezone())[0] is not None
+
+
+def test_eccc_shape(polite):
+    import ww_alerts_ca
+
+    toronto = Place("多倫多", 43.65, -79.38, "America/Toronto", "ca", "Ontario")
+    data = get(ww_alerts_ca.URL.format(-79.88, 43.15, -78.88, 44.15))
+    assert isinstance(data["features"], list)
+    for f in data["features"]:
+        p = f["properties"]
+        assert f["id"] and f["geometry"]["type"] in ("Polygon", "MultiPolygon")
+        assert p["alert_name_en"] and p["risk_colour_en"] and "expiration_datetime" in p
+    time.sleep(1)
+    assert ww_alerts_ca.alerts_for([toronto], get, datetime.now().astimezone())[0] is not None
+
+
+def test_meteoalarm_germany_shape(polite):
+    import ww_alerts_eu
+
+    data = get(ww_alerts_eu.URL.format("germany"))
+    assert isinstance(data["warnings"], list)
+    for w in data["warnings"]:
+        a = w["alert"]
+        assert a["identifier"] and a["info"]
+        info = ww_alerts_eu._info(a)
+        assert info["event"] and info["severity"] and info["category"] and info["area"]
+        assert all("areaDesc" in x for x in info["area"])
+    berlin = Place("柏林", 52.52, 13.405, "Europe/Berlin", "de", "Berlin", "Mitte")
+    ww_alerts_eu.alerts_for([berlin], get, datetime.now().astimezone())

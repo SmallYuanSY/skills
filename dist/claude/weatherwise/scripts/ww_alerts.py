@@ -4,6 +4,8 @@ from collections import defaultdict
 from datetime import datetime
 from typing import Callable
 
+import ww_alerts_ca
+import ww_alerts_eu
 import ww_alerts_hk
 import ww_alerts_jp
 import ww_alerts_tw
@@ -18,7 +20,8 @@ CAP = 6  # alerts listed per place
 # country code -> alerts_for(places, http, now) -> list[list[Alert] | None]
 PROVIDERS: dict[str, Callable] = {
     "tw": ww_alerts_tw.alerts_for, "jp": ww_alerts_jp.alerts_for,
-    "hk": ww_alerts_hk.alerts_for, "us": ww_alerts_us.alerts_for,
+    "hk": ww_alerts_hk.alerts_for, "us": ww_alerts_us.alerts_for, "ca": ww_alerts_ca.alerts_for,
+    **{cc: ww_alerts_eu.alerts_for for cc in ww_alerts_eu.COUNTRIES},
 }
 
 
