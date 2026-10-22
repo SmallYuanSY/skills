@@ -2,7 +2,7 @@ import jwt
 import pytest
 
 from conftest import (
-    NEXT_HOUR_CLEAR, NEXT_HOUR_HEAVY_NOW_STOPPING_2140, NEXT_HOUR_RAIN_AT_2105, NEXT_HOUR_RAIN_WHOLE_HOUR,
+    NEXT_HOUR_CLEAR, _next_hour, NEXT_HOUR_HEAVY_NOW_STOPPING_2140, NEXT_HOUR_RAIN_AT_2105, NEXT_HOUR_RAIN_WHOLE_HOUR,
     OPEN_METEO, WEATHERKIT, FakeHttp,
 )
 from ww_errors import WwError
@@ -157,3 +157,27 @@ def test_open_meteo_many_with_wrong_count_is_a_service_error():
 def test_open_meteo_has_no_next_hour():
     r = fetch_open_meteo(TAIPEI, 2, FakeHttp({"https://api.open-meteo.com/": OPEN_METEO}))
     assert r.next_hour is None
+
+
+def test_next_hour_rain_turning_to_snow_is_not_stopping():
+    data = _next_hour([
+        {"startTime": "2026-10-07T11:41:00Z", "condition": "rain", "precipitationIntensity": 1.0},
+        {"startTime": "2026-10-07T12:10:00Z", "condition": "snow", "precipitationIntensity": 1.0},
+    ])
+    assert summarize_next_hour(data, "Asia/Tokyo") == "rain for the whole hour"
+    data["forecastNextHour"]["summary"].append(
+        {"startTime": "2026-10-07T12:30:00Z", "condition": "clear", "precipitationIntensity": 0.0})
+    assert summarize_next_hour(data, "Asia/Tokyo") == "rain now, stopping ~21:30"
+
+
+def test_malformed_next_hour_keeps_current_and_daily():
+    bad = {"forecastNextHour": {"summary": [{"startTime": "soon"}]}}
+    r = parse_weatherkit({**WEATHERKIT, **bad}, "Asia/Taipei", 3)
+    assert r.next_hour == "unavailable here"
+    assert r.current.condition == "Partly Cloudy" and len(r.days) == 2
+
+
+def test_next_hour_without_summary_but_rain_in_minutes_is_not_called_dry():
+    data = _next_hour([], peak=2.0)
+    assert parse_weatherkit({**WEATHERKIT, **data}, "Asia/Tokyo", 1).next_hour == "unavailable here"
+    assert summarize_next_hour(_next_hour([]), "Asia/Tokyo") == "no rain expected in the next hour"

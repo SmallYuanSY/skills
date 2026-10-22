@@ -83,30 +83,35 @@ def fetch_weatherkit(place: Place, days: int, lang: str, wk: dict, http, now_ts:
     return parse_weatherkit(data, place.timezone, days)
 
 
-def _local_time(iso: str, zone: ZoneInfo) -> str:
-    return datetime.fromisoformat(iso.replace("Z", "+00:00")).astimezone(zone).strftime("%H:%M")
+def _utc(iso: str) -> datetime:
+    return datetime.fromisoformat(iso.replace("Z", "+00:00"))
 
 
 def summarize_next_hour(data: dict, tz: str) -> str:
-    """One line from forecastNextHour: segments say when rain starts or stops, intensity is mm/h."""
+    """One line from forecastNextHour. Segments split on any condition change, so only
+    `clear` ends rain; rain turning to snow is still precipitation."""
     nh = data["forecastNextHour"]
     zone = ZoneInfo(tz)
     segs = nh.get("summary") or []
-    rainy = [s for s in segs if s["condition"] != "clear"]
-    if not rainy:
+    minutes = nh.get("minutes") or []
+    peak = max([s.get("precipitationIntensity") or 0 for s in segs if s["condition"] != "clear"]
+               + [m.get("precipitationIntensity") or 0 for m in minutes], default=0)
+    if not segs:
+        if peak > 0:  # minutes show rain but nothing says when it starts or stops
+            raise ValueError("no summary segments")
         return "no rain expected in the next hour"
-    peak = max([s.get("precipitationIntensity") or 0 for s in rainy]
-               + [m.get("precipitationIntensity") or 0 for m in nh.get("minutes") or []])
-    first = rainy[0]
-    if segs[0] is not first:
-        text = f"rain starting ~{_local_time(first['startTime'], zone)}"
+    if all(s["condition"] == "clear" for s in segs):
+        return "no rain expected in the next hour"
+    fmt = lambda dt: dt.astimezone(zone).strftime("%H:%M")  # noqa: E731
+    first = next(i for i, s in enumerate(segs) if s["condition"] != "clear")
+    if first > 0:
+        text = f"rain starting ~{fmt(_utc(segs[first]['startTime']))}"
     else:
-        later = segs[1:2]
-        stop = first.get("endTime") or (later[0]["startTime"] if later else None)
-        if stop is None or (nh.get("forecastEnd") and stop >= nh["forecastEnd"]):
-            text = "rain for the whole hour"
-        else:
-            text = f"rain now, stopping ~{_local_time(stop, zone)}"
+        stop = next((_utc(s["startTime"]) for s in segs[first:] if s["condition"] == "clear"), None)
+        end = segs[-1].get("endTime")
+        if stop is None and end and nh.get("forecastEnd") and _utc(end) < _utc(nh["forecastEnd"]):
+            stop = _utc(end)
+        text = "rain for the whole hour" if stop is None else f"rain now, stopping ~{fmt(stop)}"
     return text + (", heavy" if peak >= HEAVY_RAIN_MM_H else "")
 
 
@@ -132,5 +137,10 @@ def _parse_weatherkit(data: dict, tz: str, days: int) -> Report:
             start.date().isoformat(), weatherkit_condition(d["conditionCode"]),
             d["temperatureMin"], d["temperatureMax"], None if chance is None else chance * 100,
         ))
-    next_hour = summarize_next_hour(data, tz) if data.get("forecastNextHour") else "unavailable here"
+    next_hour = "unavailable here"
+    if data.get("forecastNextHour"):
+        try:  # a malformed next-hour block must not cost the whole report
+            next_hour = summarize_next_hour(data, tz)
+        except (KeyError, TypeError, ValueError, AttributeError):
+            pass
     return Report("weatherkit", current, out, data, next_hour)

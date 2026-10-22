@@ -86,7 +86,7 @@ def set_weatherkit(team_id, service_id, key_file, key_id, cfg, d, lang, http, no
     wk = {"team_id": team_id, "key_id": key_id, "service_id": service_id,
           "key_path": str(src)}
     df = cfg.get("default")
-    place = Place(df["name"], df["lat"], df["lon"], df.get("timezone")) if df else TEST_PLACE
+    place = Place(df["name"], df["lat"], df["lon"], df.get("timezone"), df.get("country_code")) if df else TEST_PLACE
     place = with_timezone(place, http)
     try:  # one real request before anything is written
         fetch_weatherkit(place, 1, lang, wk, http, now_ts)

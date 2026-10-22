@@ -1,5 +1,6 @@
 """Real requests: they catch what fixtures can't, such as the APIs' actual field names."""
 import json
+import re
 import time
 from datetime import datetime
 from pathlib import Path
@@ -124,4 +125,7 @@ def test_weatherkit_next_hour_in_tokyo():
     tokyo = Place("東京", 35.681, 139.767, "Asia/Tokyo", "jp")
     r = fetch_weatherkit(tokyo, 1, "en", local_weatherkit(), get, int(time.time()))
     assert "forecastNextHour" in r.raw
-    assert r.next_hour and r.next_hour != "unavailable here"
+    assert re.fullmatch(
+        r"no rain expected in the next hour|rain for the whole hour|rain starting ~\d\d:\d\d(, heavy)?"
+        r"|rain now, stopping ~\d\d:\d\d(, heavy)?|rain for the whole hour, heavy",
+        r.next_hour)
