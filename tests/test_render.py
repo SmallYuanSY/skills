@@ -47,7 +47,7 @@ def test_single_place_with_alerts_and_cyclone():
         "alerts (as of 20:41, current only — not a forecast for later days):",
         "  - [extreme] 超大豪雨 新北市: 山區, until 10-08 20:00",
     ]
-    assert lines[9].startswith("  - [severe] 颱風警報 中度颱風 薔琵: 海上, until 10-08 20:00; CHAMPI-26 (GDACS Red): now ~")
+    assert lines[9].startswith("  - [severe] 颱風警報 中度颱風 薔琵: 海上; CHAMPI-26 (GDACS Red): now ~")
     assert lines[10:] == [
         "cyclones (track data, not a local official warning):",
         "  - " + lines[9].split("; ", 1)[1],
@@ -64,8 +64,8 @@ def test_multi_place_shared_alert_listed_once_with_tags():
     out = go([(BANQIAO, report(), PlaceAlerts("ok", [a])), (JIAOXI, report(), PlaceAlerts("ok", [a]))])
     assert out.count("強風 橙色 [1][2]") == 1
     assert out.splitlines()[1:3] == [
-        "[1] 板橋區, 新北市, 臺灣: Rain 23°C, wind 16 km/h; today 22–24°C, rain 99%",
-        "[2] 礁溪鄉, 宜蘭縣, 臺灣: Rain 23°C, wind 16 km/h; today 22–24°C, rain 99%",
+        "[1] 板橋區, 新北市: Rain 23°C, wind 16 km/h; today 22–24°C, rain 99%",
+        "[2] 礁溪鄉, 宜蘭縣: Rain 23°C, wind 16 km/h; today 22–24°C, rain 99%",
     ]
 
 
@@ -132,7 +132,7 @@ def test_wind_only_when_warned_or_strong():
 
 def test_multi_place_with_days_lists_each_day_under_the_place():
     out = go([(BANQIAO, report(), NONE_OK), (JIAOXI, report(), NONE_OK)], days=2)
-    assert "[1] 板橋區, 新北市, 臺灣: now Rain 23°C\n    2026-10-07 Wed: Rain, 22–24°C, rain 99%\n    2026-10-08 Thu" in out
+    assert "[1] 板橋區, 新北市: now Rain 23°C\n    2026-10-07 Wed: Rain, 22–24°C, rain 99%\n    2026-10-08 Thu" in out
 
 
 def test_multi_place_next_hour_only_when_present():
@@ -177,3 +177,65 @@ def test_error_has_code_detail_and_action():
         "action: try another spelling, add --global for places outside Taiwan, or pass lat,lon"
     )
     assert render_error(WwError("no_default_location")).startswith("error: no_default_location\n")
+
+
+def test_label_is_locality_and_region_with_country_only_on_the_location_line():
+    out = go([(BANQIAO, report(), NONE_OK)])
+    assert "location: 板橋區, 新北市, 臺灣 (25.011, 121.459)" in out
+    multi = go([(BANQIAO, report(), NONE_OK), (JIAOXI, report(), NONE_OK)])
+    assert "[1] 板橋區, 新北市: " in multi and "臺灣" not in multi
+
+
+def test_label_falls_back_to_the_name():
+    plain = Place("台北市", 25.033, 121.565, "Asia/Taipei", "tw")
+    assert "location: 台北市 (25.033, 121.565)" in go([(plain, report(), NONE_OK)])
+    assert "[1] 台北市: " in go([(plain, report(), NONE_OK), (TOKYO, report(), NONE_OK)])
+
+
+def test_typhoon_has_no_until_time():
+    ty = alert("ncdr:颱風", "severe", "颱風警報 中度颱風 薔琵", "中心位置", "typhoon")
+    out = go([(BANQIAO, report(), PlaceAlerts("ok", [ty]))])
+    assert "  - [severe] 颱風警報 中度颱風 薔琵: 中心位置\n" in out + "\n" and "until" not in out
+
+
+def test_merged_cyclone_text_names_the_storm_once():
+    ty = alert("ncdr:颱風", "severe", "颱風警報", "x", "typhoon", cyclone=CHAMPI)
+    out = go([(BANQIAO, report(), PlaceAlerts("ok", [ty])), (JIAOXI, report(), PlaceAlerts("ok", [ty]))])
+    line = next(ln for ln in out.splitlines() if "CHAMPI" in ln)
+    assert line.count("CHAMPI-26") == 1 and line.count("GDACS Red") == 1
+    assert "; CHAMPI-26 (GDACS Red): now ~" in line and " of [1], ~" in line and " of [2]; forecast closest ~" in line
+    assert line.endswith(" km [1], ~" + line.rsplit("~", 1)[1]) and line.endswith(" km [2]")
+
+
+def test_variants_with_different_summaries_drop_the_summary_and_expire_latest():
+    later = UNTIL + timedelta(hours=3)
+    a = alert(severity="severe", title="大豪雨", summary="摘要甲", expires=UNTIL)
+    b = alert(severity="extreme", title="超大豪雨", summary="摘要乙", expires=later)
+    out = go([(BANQIAO, report(), PlaceAlerts("ok", [a])), (JIAOXI, report(), PlaceAlerts("ok", [b]))])
+    assert "  - [extreme] 超大豪雨 [2] / 大豪雨 [1]: until 10-08 23:00" in out
+    assert "摘要" not in out
+
+
+def test_variants_sharing_a_summary_keep_it():
+    a = alert(severity="severe", title="大豪雨"), alert(severity="extreme", title="超大豪雨")
+    out = go([(BANQIAO, report(), PlaceAlerts("ok", [a[0]])), (JIAOXI, report(), PlaceAlerts("ok", [a[1]]))])
+    assert "超大豪雨 [2] / 大豪雨 [1]: 山區, until" in out
+
+
+def test_cap_applies_after_grouping_so_shared_alerts_keep_their_tags():
+    many = [alert(f"k{i}", "minor", f"t{i}") for i in range(7)]  # k6 is past the cap for place 1
+    out = go([(BANQIAO, report(), PlaceAlerts("ok", many)), (JIAOXI, report(), PlaceAlerts("ok", [many[6]]))])
+    assert "t6 [1][2]" in out and "more (run again" not in out
+
+
+def test_more_line_counts_only_alerts_shown_nowhere():
+    many = [alert(f"k{i}", "minor", f"t{i}") for i in range(8)]
+    out = go([(BANQIAO, report(), PlaceAlerts("ok", many)), (JIAOXI, report(), PlaceAlerts("ok", [many[6]]))])
+    assert "  - [1] +1 more (run again with --detail)" in out
+
+
+def test_json_carries_the_query():
+    from ww_render import render_json
+    data = render_json([(BANQIAO, report(), NONE_OK), (None, WwError("place_not_found", "zzzz"), None)], [], None,
+                       ["板橋", "zzzz"])
+    assert [p["query"] for p in data["places"]] == ["板橋", "zzzz"]

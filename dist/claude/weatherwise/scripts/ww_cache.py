@@ -6,16 +6,23 @@ import tempfile
 from pathlib import Path
 
 DAY = 86400
+ALERT_TTL = 300
+GDACS = "https://www.gdacs.org"
+ALERT_FEEDS = (
+    "https://alerts.ncdr.nat.gov.tw",
+    "https://www.jma.go.jp/bosai/warning",
+    "https://data.weather.gov.hk",
+    "https://api.weather.gov",
+    "https://api.weather.gc.ca",
+    "https://feeds.meteoalarm.org",
+)
+ALERT_SOURCES = ALERT_FEEDS + (GDACS,)  # whose age the output reports as "as of"
+OPEN_METEO = "https://api.open-meteo.com"
 # First matching prefix wins; anything unlisted is only de-duplicated within a run.
 TTLS = (
-    ("https://alerts.ncdr.nat.gov.tw", 300),
-    ("https://www.jma.go.jp/bosai/warning", 300),
-    ("https://data.weather.gov.hk", 300),
-    ("https://api.weather.gov", 300),
-    ("https://api.weather.gc.ca", 300),
-    ("https://feeds.meteoalarm.org", 300),
-    ("https://www.gdacs.org", 900),
-    ("https://api.open-meteo.com", 900),
+    *((p, ALERT_TTL) for p in ALERT_FEEDS),
+    (GDACS, 900),
+    (OPEN_METEO, 900),
     ("https://weatherkit.apple.com/api/v1/weather", 900),
     ("https://www.jma.go.jp/bosai/common/const/area.json", 30 * DAY),
     ("https://nominatim.openstreetmap.org", 30 * DAY),
@@ -34,6 +41,8 @@ _default_dir = cache_dir  # Cached.__init__ shadows the name with its parameter
 
 
 def ttl_for(url: str) -> int:
+    if url.startswith(OPEN_METEO) and "timezone=auto" in url:
+        return 30 * DAY  # a coordinate's timezone never changes
     for prefix, ttl in TTLS:
         if url.startswith(prefix):
             return ttl
@@ -68,6 +77,13 @@ class Cached:
         if ttl:
             self._write(path, text, body)
         return body
+
+    def is_fresh(self, url: str, text: bool = False) -> bool:
+        """True when calling this URL would not make a request."""
+        if (url, text) in self.memo:
+            return True
+        ttl = ttl_for(url)
+        return bool(ttl) and self._read(self.dir / hashlib.sha256(url.encode()).hexdigest(), ttl, text) is not None
 
     def fetched_at(self, url: str) -> int | None:
         """When the data served for this URL was fetched, or None if it came live this run."""

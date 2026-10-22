@@ -57,8 +57,11 @@ def _is_district(r: dict, query: str) -> bool:
     return r.get("class") == "boundary" and r.get("type") == "administrative" and name.startswith(query)
 
 
-def _pick(results: list[dict], query: str) -> dict:
-    # A same-named village often ranks first ("坪林" in 苗栗 before 新北市坪林區), so prefer the district
+def _pick(results: list[dict], query: str, prefer_district: bool = True) -> dict:
+    # A same-named village often ranks first ("坪林" in 苗栗 before 新北市坪林區), so prefer the district.
+    # Only in the Taiwan search: worldwide, Nominatim's importance order is right ("Berlin" is not Berlin, NH)
+    if not prefer_district:
+        return results[0]
     return next((r for r in results if _is_district(r, query)), results[0])
 
 
@@ -93,8 +96,9 @@ def geocode(query: str, lang: str, global_search: bool, http) -> Place:
             time.sleep(PAUSE)
         res = _search(params, http)
         if res:
-            r = _pick(res, query)
-            if not global_search and not _is_district(r, query):
+            taiwan = "countrycodes" in params
+            r = _pick(res, query, taiwan)
+            if taiwan and not _is_district(r, query):
                 r = _district_by_suffix(query, params, res[0], http) or r
             parts = [p.strip() for p in r["display_name"].split(",")]
             name = ", ".join(p for p in parts if not p.isdigit())

@@ -132,3 +132,20 @@ def test_ncdr_unparseable_response_is_unavailable_through_collect(monkeypatch):
     monkeypatch.setitem(ww_alerts.PROVIDERS, "tw", ww_alerts_tw.alerts_for)
     res, _ = ww_alerts.collect([BANQIAO], FakeHttp({ww_alerts_tw.FEED: "<feed><entry>"}), NCDR_NOW)
     assert res[0].status == "unavailable" and "ParseError" in res[0].reason
+
+
+def test_wind_summary_keeps_the_hazard_text_not_the_county_list():
+    (alerts,) = run([BANQIAO])
+    wind = next(a for a in alerts if a.kind == "wind")
+    assert "基隆市" not in wind.summary and "局部地區" not in wind.summary
+    assert "平均風9級以上或陣風11級以上發生的機率(橙色燈號)" in wind.summary and len(wind.summary) <= 60
+
+
+def test_a_single_county_in_a_summary_is_kept():
+    (alerts,) = run([JIAOXI])
+    assert "宜蘭縣" in next(a for a in alerts if a.kind == "rain").summary
+
+
+def test_summary_uses_the_next_clause_when_the_first_is_only_a_county_list():
+    text = "基隆市、新北市、桃園市局部地區，新北市山區有局部大雨"
+    assert ww_alerts_tw._summary("wind", text, "新北市") == "新北市山區有局部大雨"

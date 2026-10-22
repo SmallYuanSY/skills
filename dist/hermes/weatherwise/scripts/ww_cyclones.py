@@ -97,10 +97,22 @@ def _round10(km: float) -> int:
     return int(round(km / 10.0)) * 10
 
 
-def describe(c: Cyclone, place: Place) -> str:
-    """No time: GDACS gives none for the forecast positions."""
+def _measure(c: Cyclone, place: Place) -> tuple[int, str, int]:
     now_km = ww_geo.distance_km(place.lat, place.lon, c.lat, c.lon)
     direction = ww_geo.bearing(place.lat, place.lon, c.lat, c.lon)
     closest = ww_geo.distance_to_path_km(place.lat, place.lon, [(c.lat, c.lon)] + c.track)
-    return (f"{c.name} (GDACS {c.level}): now ~{_round10(now_km)} km {direction}, "
-            f"forecast closest ~{_round10(closest)} km")
+    return _round10(now_km), direction, _round10(closest)
+
+
+def describe(c: Cyclone, place: Place) -> str:
+    """No time: GDACS gives none for the forecast positions."""
+    now_km, direction, closest = _measure(c, place)
+    return f"{c.name} (GDACS {c.level}): now ~{now_km} km {direction}, forecast closest ~{closest} km"
+
+
+def describe_many(c: Cyclone, places: list[tuple[int, Place]]) -> str:
+    """One storm for several places: name and level once, distances tagged [n] per place."""
+    m = [(i, _measure(c, p)) for i, p in places]
+    now = ", ".join(f"~{n} km {d} of [{i + 1}]" for i, (n, d, _) in m)
+    closest = ", ".join(f"~{k} km [{i + 1}]" for i, (_, _, k) in m)
+    return f"{c.name} (GDACS {c.level}): now {now}; forecast closest {closest}"

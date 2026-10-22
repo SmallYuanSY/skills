@@ -52,44 +52,65 @@ def _error_lines(err: WwError, prefix: str = "") -> list[str]:
 
 
 def _until(a: Alert, place: Place) -> str:
-    return f"until {_local(a.expires, place):%m-%d %H:%M}" if a.expires else ""
+    # A typhoon's expiry is its next bulletin, not the end of the warning
+    return f"until {_local(a.expires, place):%m-%d %H:%M}" if a.expires and a.kind != "typhoon" else ""
+
+
+def _label(place: Place, country: bool = False) -> str:
+    """Short place name: locality, region (and the country on the location line), else the full name."""
+    parts = []
+    for p in (place.locality, place.region):
+        if p and p not in parts:
+            parts.append(p)
+    if not parts:
+        return place.name
+    tail = place.name.rsplit(", ", 1)[-1] if ", " in place.name else None
+    if country and tail and tail not in parts:
+        parts.append(tail)
+    return ", ".join(parts)
 
 
 def _alert_lines(entries: list, multi: bool, detail: bool) -> list[str]:
     """One line per alert key; places sharing a key are tagged [i], and per-place variants
-    of the same key (rain levels differ between townships) share the line."""
+    of the same key (rain levels differ between townships) share the line. The per-place cap
+    is applied after grouping, so a key shown for one place keeps the tags of the others."""
+    rank = lambda a: SEVERITY_RANK.get(a.severity, 9)  # noqa: E731
+    live = [(i, e[2]) for i, e in enumerate(entries) if e[0] is not None and e[2] is not None]
+    shown_keys = {a.key for _, pa in live for a in (pa.alerts if detail else pa.alerts[:CAP])}
     groups: dict[str, list[tuple[int, Alert]]] = {}
-    hidden = []
-    for i, (place, report, pa) in enumerate(entries):
-        if place is None or pa is None:
-            continue
-        shown = pa.alerts if detail else pa.alerts[:CAP]
-        for a in shown:
-            groups.setdefault(a.key, []).append((i, a))
-        if len(pa.alerts) > len(shown):
-            hidden.append((i, len(pa.alerts) - len(shown)))
+    for i, pa in live:
+        for a in pa.alerts:
+            if a.key in shown_keys:
+                groups.setdefault(a.key, []).append((i, a))
 
-    ordered = sorted(groups.values(), key=lambda g: min(SEVERITY_RANK.get(a.severity, 9) for _, a in g))
     lines = []
-    for group in ordered:
-        best_i, best = min(group, key=lambda x: SEVERITY_RANK.get(x[1].severity, 9))
+    for group in sorted(groups.values(), key=lambda g: min(rank(a) for _, a in g)):
+        best_i, best = min(group, key=lambda x: rank(x[1]))
         titles: dict[str, list[int]] = {}
-        for i, a in sorted(group, key=lambda x: SEVERITY_RANK.get(x[1].severity, 9)):
+        for i, a in sorted(group, key=lambda x: rank(x[1])):
             titles.setdefault(a.title, []).append(i)
         if multi:
             title = " / ".join(t + " " + "".join(f"[{i + 1}]" for i in sorted(ix)) for t, ix in titles.items())
         else:
             title = best.title
-        rest = ", ".join(x for x in (best.summary, _until(best, entries[best_i][0])) if x)
+        summary = best.summary if len({a.summary for _, a in group}) == 1 else ""
+        dated = [(i, a) for i, a in group if a.expires]
+        latest_i, latest = max(dated, key=lambda x: x[1].expires) if dated else (best_i, best)
+        until = _until(latest, entries[latest_i][0]) if dated else ""
+        rest = ", ".join(x for x in (summary, until) if x)
         line = f"  - [{best.severity}] {title}" + (f": {rest}" if rest else "")
-        for i, a in group:
-            if a.cyclone is not None:
-                line += "; " + ww_cyclones.describe(a.cyclone, entries[i][0]) + (f" [{i + 1}]" if multi else "")
+        cyc = [(i, a.cyclone) for i, a in group if a.cyclone is not None]
+        if cyc:
+            tagged = sorted({i for i, _ in cyc})
+            line += "; " + (ww_cyclones.describe_many(cyc[0][1], [(i, entries[i][0]) for i in tagged])
+                            if multi else ww_cyclones.describe(cyc[0][1], entries[cyc[0][0]][0]))
         lines.append(line)
         if detail and best.detail:
             lines += [f"      {part}" for part in best.detail.splitlines()]
-    for i, n in hidden:
-        lines.append(f"  - {f'[{i + 1}] ' if multi else ''}+{n} more (run again with --detail)")
+    for i, pa in live:
+        n = sum(1 for a in pa.alerts if a.key not in shown_keys)
+        if n:
+            lines.append(f"  - {f'[{i + 1}] ' if multi else ''}+{n} more (run again with --detail)")
     return lines
 
 
@@ -120,7 +141,7 @@ def render(entries: list[Entry], cyclones: list[tuple[Cyclone, list[int]]], now:
 
     if not multi:
         place, report, pa = entries[0]
-        lines.append(f"location: {place.name} ({place.lat:.3f}, {place.lon:.3f})")
+        lines.append(f"location: {_label(place, True)} ({place.lat:.3f}, {place.lon:.3f})")
         if report.current:
             lines.append(f"now: {_now_text(report, pa)}")
         if report.next_hour is not None:
@@ -134,7 +155,7 @@ def render(entries: list[Entry], cyclones: list[tuple[Cyclone, list[int]]], now:
             if place is None or isinstance(report, WwError):
                 lines += _error_lines(report, tag)
                 continue
-            name = place.name
+            name = _label(place)
             if place.timezone != home_tz:
                 t = _local(now, place)
                 name += f" (local_time: {t:%Y-%m-%dT%H:%M} {WEEKDAYS[t.weekday()]})"
@@ -169,8 +190,8 @@ def render(entries: list[Entry], cyclones: list[tuple[Cyclone, list[int]]], now:
     if cyclones:
         lines.append("cyclones (track data, not a local official warning):")
         for c, indices in cyclones:
-            for i in indices:
-                lines.append(f"  - {ww_cyclones.describe(c, entries[i][0])}" + (f" [{i + 1}]" if multi else ""))
+            lines.append("  - " + (ww_cyclones.describe_many(c, [(i, entries[i][0]) for i in indices]) if multi
+                                   else ww_cyclones.describe(c, entries[indices[0]][0])))
     return "\n".join(lines)
 
 
@@ -188,14 +209,16 @@ def _cyclone_json(c: Cyclone) -> dict:
             "track": [list(p) for p in c.track]}
 
 
-def render_json(entries: list[Entry], cyclones: list[tuple[Cyclone, list[int]]], notice: str | None) -> dict:
+def render_json(entries: list[Entry], cyclones: list[tuple[Cyclone, list[int]]], notice: str | None,
+                queries: list[str | None] | None = None) -> dict:
     places = []
-    for place, report, pa in entries:
+    for n, (place, report, pa) in enumerate(entries):
         if isinstance(report, WwError):
             item = {"location": place.name if place else None,
                     "error": {"code": report.code, "detail": report.detail, "action": ACTIONS[report.code]}}
         else:
             item = {"location": place.name, "source": report.source, "forecast": report.raw}
+        item = {"query": queries[n] if queries else None, **item}
         if pa is not None:
             item["alerts"] = {"status": pa.status, "reason": pa.reason, "items": [_alert_json(a) for a in pa.alerts]}
         places.append(item)

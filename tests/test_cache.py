@@ -109,3 +109,18 @@ def test_fetched_at_is_the_disk_write_time_or_none_when_live(tmp_path):
     second = Cached(http, 1100, tmp_path)
     second(ALERTS, text=True)
     assert second.fetched_at(ALERTS) == 1000
+
+
+def test_timezone_probe_is_cached_for_30_days_but_forecasts_are_not():
+    probe = "https://api.open-meteo.com/v1/forecast?latitude=25.0&longitude=121.4&timezone=auto&forecast_days=1"
+    forecast = "https://api.open-meteo.com/v1/forecast?latitude=25.0&longitude=121.4&timezone=Asia%2FTaipei&forecast_days=3"
+    assert ttl_for(probe) == 30 * 86400 and ttl_for(forecast) == 900
+
+
+def test_is_fresh_means_served_without_a_request(tmp_path):
+    http = FakeHttp({ALERTS: "<feed/>"})
+    c = Cached(http, 1000, tmp_path)
+    assert not c.is_fresh(ALERTS, text=True)
+    c(ALERTS, text=True)
+    assert c.is_fresh(ALERTS, text=True) and Cached(http, 1100, tmp_path).is_fresh(ALERTS, text=True)
+    assert not Cached(http, 1400, tmp_path).is_fresh(ALERTS, text=True)

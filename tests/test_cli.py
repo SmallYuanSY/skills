@@ -157,7 +157,7 @@ def test_lang_flag_reaches_the_geocoder(config_dir, capsys):
 def test_one_bad_place_does_not_fail_the_others(config_dir, capsys):
     code, out = run(["板橋", "zzzz"], world(), capsys)
     assert code == 0
-    assert "[1] 板橋區, 新北市, 臺灣: Partly Cloudy 27°C" in out
+    assert "[1] 板橋區, 新北市: Partly Cloudy 27°C" in out
     assert "[2] error: place_not_found (zzzz)\n    action: try another spelling" in out
 
 
@@ -226,3 +226,40 @@ def test_weatherkit_auth_failure_falls_back_for_every_place(config_dir, p8_key, 
     code, out = run(["板橋", "礁溪"], world(**{WK: HttpError(403)}), capsys)
     assert code == 0 and out.startswith("notice: weatherkit_auth_failed (HTTP 403)")
     assert "[2] 礁溪鄉" in out
+
+
+def test_revoked_weatherkit_key_is_tried_once(config_dir, p8_key, capsys):
+    use_weatherkit(config_dir, p8_key)
+    http = world(**{WK: HttpError(401)})
+    code, out = run(["板橋", "礁溪"], http, capsys)
+    assert code == 0 and sum(u.startswith(WK) for u, _ in http.calls) == 1
+    assert "[1] 板橋區" in out and "[2] 礁溪鄉" in out
+
+
+def test_no_nominatim_pause_before_a_cached_lookup(config_dir, capsys, monkeypatch):
+    run(["礁溪"], world(), capsys)
+    sleeps = []
+    monkeypatch.setattr("time.sleep", sleeps.append)
+    run(["板橋", "礁溪"], world(), capsys)
+    assert sleeps == []
+
+
+def test_nominatim_pause_before_a_second_live_lookup(config_dir, capsys, monkeypatch):
+    sleeps = []
+    monkeypatch.setattr("time.sleep", sleeps.append)
+    run(["板橋", "礁溪"], world(), capsys)
+    assert len(sleeps) == 1
+
+
+def test_gdacs_age_counts_toward_as_of(config_dir, capsys):
+    gdacs = {"features": []}
+    import ww_cyclones
+    weatherwise.main(["板橋"], http=world(**{ww_cyclones.LIST_URL: gdacs}), now=NOW.replace(minute=30))
+    capsys.readouterr()
+    _, out = run(["板橋"], world(**{ww_cyclones.LIST_URL: gdacs}), capsys)  # NCDR expired, GDACS still cached
+    assert "alerts (as of 20:30, current only" in out
+
+
+def test_json_has_the_query_of_each_place(config_dir, capsys):
+    _, out = run(["板橋", "zzzz", "--json"], world(), capsys)
+    assert [p["query"] for p in json.loads(out)["places"]] == ["板橋", "zzzz"]

@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from ww_alerts import collect  # noqa: E402
-from ww_cache import Cached, ttl_for  # noqa: E402
+from ww_cache import ALERT_SOURCES, Cached  # noqa: E402
 from ww_config import config_dir, load_config, resolve_lang, weatherkit_settings  # noqa: E402
 from ww_errors import WwError  # noqa: E402
 from ww_http import REPO, VERSION, HttpError, get  # noqa: E402
@@ -30,7 +30,6 @@ from ww_setup import ensure_default_complete, remove_weatherkit, set_default, se
 
 MAX_PLACES = 5
 NOMINATIM_HOST = "https://nominatim.openstreetmap.org"
-ALERT_TTL = 300  # the TTL shared by every alert feed in ww_cache.TTLS
 VERSION_LINE = f"weatherwise {VERSION} · by SmallYuan · {REPO}"
 AUTH_FALLBACK = (
     "weatherkit_auth_failed (HTTP {status}), fell back to open-meteo; tell the user their "
@@ -52,12 +51,17 @@ def _forecasts(places: list, days: int, lang: str, wk, http, now_ts: int):
     fallback = list(range(len(places)))
     if wk:
         fallback = []
+        revoked = False
         for i, place in enumerate(places):
+            if revoked:  # the key was rejected once; asking again for every place would just repeat it
+                fallback.append(i)
+                continue
             try:
                 out[i] = fetch_weatherkit(place, days, lang, wk, http, now_ts)
             except HttpError as e:
                 if e.status in (401, 403):
                     notice = AUTH_FALLBACK.format(status=e.status)
+                    revoked = True
                     fallback.append(i)
                 else:
                     out[i] = WwError("service_error", f"weatherkit HTTP {e.status}")
@@ -75,13 +79,26 @@ def _forecasts(places: list, days: int, lang: str, wk, http, now_ts: int):
     return out, notice
 
 
-def _fetched_live(cached: Cached, prefix: str) -> bool:
-    return any(url.startswith(prefix) and cached.fetched_at(url) is None for url, _ in cached.memo)
+class Paced:
+    """Nominatim allows one request per second: wait before a lookup that will really hit the network
+    when an earlier one already did. Cached lookups never wait."""
+
+    def __init__(self, cached: Cached):
+        self.cached = cached
+        self.live = False
+
+    def __call__(self, url: str, headers: dict | None = None, *, text: bool = False):
+        if url.startswith(NOMINATIM_HOST) and not self.cached.is_fresh(url, text):
+            if self.live:
+                time.sleep(PAUSE)
+            self.live = True
+        return self.cached(url, headers, text=text)
 
 
 def _alerts_as_of(cached: Cached, now: datetime) -> datetime:
     """Alert data older than this run (served from the disk cache) is reported with its own age."""
-    times = [t for url, _ in cached.memo if ttl_for(url) == ALERT_TTL and (t := cached.fetched_at(url)) is not None]
+    times = [t for url, _ in cached.memo
+             if url.startswith(ALERT_SOURCES) and (t := cached.fetched_at(url)) is not None]
     return datetime.fromtimestamp(min(times), timezone.utc) if times else now
 
 
@@ -101,7 +118,8 @@ def run_weather(argv: list[str], http, now: datetime | None) -> str:
         raise WwError("too_many_places", str(len(a.places)))
 
     now = now or datetime.now(timezone.utc)
-    http = Cached(http, int(now.timestamp()))
+    cached = Cached(http, int(now.timestamp()))
+    http = Paced(cached)
     cfg = load_config(config_dir())
     lang = resolve_lang(a.lang, cfg)
     wk = weatherkit_settings(cfg)  # config mistakes stop here, before any request
@@ -112,8 +130,6 @@ def run_weather(argv: list[str], http, now: datetime | None) -> str:
 
     resolved: list = []  # (Place | None, WwError | None) per query
     for q in queries:
-        if _fetched_live(http, NOMINATIM_HOST):
-            time.sleep(PAUSE)  # Nominatim allows one request per second, and the last place just used it
         try:
             resolved.append((with_timezone(resolve_place(q, cfg, lang, a.global_search, http), http), None))
         except WwError as e:
@@ -142,8 +158,8 @@ def run_weather(argv: list[str], http, now: datetime | None) -> str:
     entries = [(resolved[i][0], reports[i], alerts[i]) for i in range(len(resolved))]
 
     if a.json:
-        return json.dumps(render_json(entries, cyclones, notice), ensure_ascii=False, indent=2)
-    return render(entries, cyclones, now, _alerts_as_of(http, now), days, notice, a.detail)
+        return json.dumps(render_json(entries, cyclones, notice, a.places or [None]), ensure_ascii=False, indent=2)
+    return render(entries, cyclones, now, _alerts_as_of(cached, now), days, notice, a.detail)
 
 
 def run_config(argv: list[str], http, now: datetime | None) -> str:

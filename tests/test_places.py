@@ -244,3 +244,20 @@ def test_district_is_the_county_outside_taiwan_and_none_in_taiwan():
               "address": {"city": "Berlin", "state": "Berlin", "country_code": "de"}}
     assert geocode("Berlin", "en", True, FakeHttp({NOMINATIM: [berlin]})).district == "Berlin"
     assert geocode("坪林", "zh-TW", False, FakeHttp({NOMINATIM: PINGLIN_MIXED})).district is None
+
+
+BERLIN_DE = {"class": "place", "type": "city", "name": "Berlin", "display_name": "Berlin, Deutschland",
+             "lat": "52.5170365", "lon": "13.3888599",
+             "address": {"city": "Berlin", "state": "Berlin", "country": "Deutschland", "country_code": "de"}}
+BERLIN_NH = {"class": "boundary", "type": "administrative", "name": "Berlin",
+             "display_name": "Berlin, Coös County, New Hampshire, United States",
+             "lat": "44.47", "lon": "-71.18",
+             "address": {"city": "Berlin", "county": "Coös County", "state": "New Hampshire", "country_code": "us"}}
+
+
+@pytest.mark.parametrize("global_search", [True, False])
+def test_worldwide_search_keeps_the_importance_order(global_search):
+    def route(url):
+        return [] if "countrycodes=tw" in url else [BERLIN_DE, BERLIN_NH]
+    p = geocode("Berlin", "en", global_search, FakeHttp({NOMINATIM: route}))
+    assert p.country_code == "de"

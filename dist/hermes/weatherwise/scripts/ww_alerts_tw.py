@@ -76,6 +76,15 @@ def _segments(text: str) -> list[str]:
     return [s for s in re.split(r"[，。]", text) if s.strip()]
 
 
+COUNTY = r"[\u4e00-\u9fff]{1,3}[縣市](?:\([^)]*\))?"
+COUNTY_RUN = re.compile(rf"{COUNTY}(?:、{COUNTY})+(?:局部)?地區?")
+
+
+def _strip_counties(seg: str) -> str:
+    """The wind text lists every county before the hazard; the hazard is what matters."""
+    return COUNTY_RUN.sub("", seg).strip(" 、")
+
+
 def _summary(kind: str, text: str, region: str | None) -> str:
     if kind == "typhoon":
         # the feed prefixes the prose with machine-readable fields, so start at the named storm
@@ -84,10 +93,16 @@ def _summary(kind: str, text: str, region: str | None) -> str:
             return m.group(0)[:LIMIT]
     elif region:
         norm = _norm(text)
+        first = None
         for seg in _segments(norm):
             if region in seg:
                 start = norm.index(seg)
-                return text[start:start + len(seg)].strip()[:LIMIT]
+                cleaned = _strip_counties(text[start:start + len(seg)])
+                if len(cleaned) > 6:  # shorter is just what is left of a county list
+                    return cleaned[:LIMIT]
+                first = first or cleaned
+        if first:
+            return first[:LIMIT]
     return text.strip()[:LIMIT]
 
 
