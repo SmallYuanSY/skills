@@ -68,8 +68,12 @@ CASES = [
 @pytest.mark.parametrize("provider,place,routes,bad_url", CASES)
 def test_rejected_json_body_is_evicted(tmp_path, provider, place, routes, bad_url):
     c = Cached(FakeHttp({**routes, bad_url: "Too Many Requests"}), TS, tmp_path)
-    with pytest.raises(Exception):
-        provider([place], c, NOW)
+    try:
+        (got,) = provider([place], c, NOW)
+    except Exception:
+        got = None
+    else:
+        assert isinstance(got, Exception)  # NWS reports a failed point per place
     assert not any(u.startswith(bad_url) for u, _ in c.memo)
     assert not Cached(FakeHttp({}), TS + 1, tmp_path).is_fresh(next(u for u, _ in c.http.calls if u.startswith(bad_url)))
 

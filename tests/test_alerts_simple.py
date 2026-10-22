@@ -138,3 +138,13 @@ def test_nws_malformed_feature_is_skipped_not_fatal():
              feature(id="urn:x:3", expires="not a time"), feature(id="urn:x:4")])
     (alerts,) = ww_alerts_us.alerts_for([NYC], h, NOW)
     assert [a.key for a in alerts] == ["nws:urn:x:4"]
+
+
+def test_nws_failed_point_is_unavailable_for_that_place_only():
+    from ww_http import HttpError
+    h = FakeHttp({"https://api.weather.gov/alerts/active?point=36.0633": HttpError(500),
+                  "https://api.weather.gov/alerts/active": {"features": []}})
+    ny, flag = ww_alerts_us.alerts_for([NYC, FLAGSTAFF], h, NOW)
+    assert ny == [] and isinstance(flag, HttpError)
+    res, _, _ = ww_alerts.collect([NYC, FLAGSTAFF], h, NOW)
+    assert (res[0].status, res[1].status, res[1].reason) == ("ok", "unavailable", "us HTTP 500")

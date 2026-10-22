@@ -17,7 +17,8 @@ from ww_model import SEVERITY_ORDER, Alert, Cyclone, Place, PlaceAlerts
 
 CAP = 6  # alerts listed per place
 
-# country code -> alerts_for(places, http, now) -> list[list[Alert] | None]
+# country code -> alerts_for(places, http, now) -> one item per place: list[Alert], None (the place cannot be
+# matched: unsupported), or an Exception (that place alone is unavailable). Raising makes them all unavailable.
 PROVIDERS: dict[str, Callable] = {
     "tw": ww_alerts_tw.alerts_for, "jp": ww_alerts_jp.alerts_for,
     "hk": ww_alerts_hk.alerts_for, "us": ww_alerts_us.alerts_for, "ca": ww_alerts_ca.alerts_for,
@@ -75,13 +76,18 @@ def collect(places: list[Place], http, now: datetime) -> Collected:
             per_place = provider([places[i] for i in idx], http, now)
             if len(per_place) != len(idx):
                 raise ValueError("provider returned the wrong number of results")
-            cleaned = [None if a is None else _clean(a, now) for a in per_place]
+            cleaned = [a if a is None or isinstance(a, Exception) else _clean(a, now) for a in per_place]
         except Exception as e:
             for i in idx:
                 results[i] = PlaceAlerts("unavailable", [], _reason(cc, e))
             continue
         for i, alerts in zip(idx, cleaned):
-            results[i] = PlaceAlerts("unsupported", []) if alerts is None else PlaceAlerts("ok", alerts)
+            if alerts is None:
+                results[i] = PlaceAlerts("unsupported", [])
+            elif isinstance(alerts, Exception):
+                results[i] = PlaceAlerts("unavailable", [], _reason(cc, alerts))
+            else:
+                results[i] = PlaceAlerts("ok", alerts)
 
     cyclone_error = None
     try:

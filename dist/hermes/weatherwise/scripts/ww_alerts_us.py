@@ -50,8 +50,15 @@ def _alert(props: dict) -> Alert:
                  _time(props.get("sent") or props.get("effective")), "nws", f"nws:{props['id']}")
 
 
-def alerts_for(places: list[Place], http, now: datetime) -> list[list[Alert] | None]:
-    return [_place_alerts(fetch_checked(http, URL.format(p.lat, p.lon), features)) for p in places]
+def alerts_for(places: list[Place], http, now: datetime) -> list[list[Alert] | Exception]:
+    """One request per place, so a failed point makes only its own place unavailable."""
+    out: list[list[Alert] | Exception] = []
+    for p in places:
+        try:
+            out.append(_place_alerts(fetch_checked(http, URL.format(p.lat, p.lon), features)))
+        except Exception as e:  # noqa: BLE001 - collect turns it into "unavailable (reason)"
+            out.append(e)
+    return out
 
 
 def _place_alerts(feats: list) -> list[Alert]:
