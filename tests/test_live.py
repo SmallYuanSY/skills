@@ -99,8 +99,8 @@ def test_free_mode_end_to_end(config_dir, capsys, polite):
     assert "timezone=Asia/Taipei" in capsys.readouterr().out
     assert weatherwise.main([]) == 0
     lines = capsys.readouterr().out.splitlines()
-    assert lines[0] == "source: open-meteo"
-    assert lines[2].startswith(f"local_time: {taipei_today()}T")
+    assert lines[0].startswith(f"local_time: {taipei_today()}T")
+    assert not any(line.startswith("source:") for line in lines)
 
 
 @needs_weatherkit
@@ -124,7 +124,7 @@ def test_weatherkit_setup_end_to_end(config_dir, capsys):
     assert "source: weatherkit" in out
     assert wk["team_id"] not in out
     assert weatherwise.main([]) == 0
-    assert capsys.readouterr().out.startswith("source: weatherkit")
+    assert capsys.readouterr().out.startswith("local_time: ")
     assert weatherwise.main(["config", "weatherkit", "--remove"]) == 0
 
 
