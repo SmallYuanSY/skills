@@ -15,6 +15,7 @@ class Place:
     country_code: str | None = None  # lowercase ISO 3166-1 alpha-2
     region: str | None = None  # Taiwan county/city, Japan prefecture, US state
     locality: str | None = None  # Taiwan township/district, Japan municipality
+    district: str | None = None  # county-level area outside Taiwan (German Kreis, UK county), else None
 
 
 @dataclass

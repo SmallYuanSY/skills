@@ -38,7 +38,7 @@ def test_set_default_saves_and_asks_to_confirm(config_dir, capsys):
     assert out.splitlines()[1].startswith("action: confirm with the user")
     assert load_config(config_dir)["default"] == {
         "name": "臺中市, 臺灣", "lat": 24.1477, "lon": 120.6736, "timezone": "Asia/Taipei",
-        "country_code": "tw", "region": "臺中市", "locality": None}
+        "country_code": "tw", "region": "臺中市", "locality": None, "district": None}
 
 
 def test_set_default_unknown_place_writes_nothing(config_dir, capsys):

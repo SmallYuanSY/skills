@@ -39,7 +39,8 @@ def show(cfg: dict, d: Path) -> str:
 def set_default(query: str, global_search: bool, cfg: dict, d: Path, lang: str, http) -> str:
     place = with_timezone(resolve_place(query, cfg, lang, global_search, http), http)
     cfg["default"] = {"name": place.name, "lat": place.lat, "lon": place.lon, "timezone": place.timezone,
-                      "country_code": place.country_code, "region": place.region, "locality": place.locality}
+                      "country_code": place.country_code, "region": place.region, "locality": place.locality,
+                      "district": place.district}
     save_config(d, cfg)
     return (
         f"saved: default = {place.name} ({place.lat:.3f}, {place.lon:.3f}) timezone={place.timezone}\n"
@@ -58,7 +59,7 @@ def ensure_default_complete(cfg: dict, d: Path, lang: str, http) -> None:
         return  # try again next run; the weather itself does not need it
     if not found.country_code:
         return
-    df.update(country_code=found.country_code, region=found.region, locality=found.locality)
+    df.update(country_code=found.country_code, region=found.region, locality=found.locality, district=found.district)
     save_config(d, cfg)
 
 

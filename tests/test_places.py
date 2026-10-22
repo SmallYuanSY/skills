@@ -233,3 +233,14 @@ def test_county_administered_city_has_the_county_as_region():
               "address": {"town": "宜蘭市", "county": "宜蘭縣", "country": "臺灣", "country_code": "tw"}}]
     p = geocode("宜蘭市", "zh-TW", False, FakeHttp({NOMINATIM: yilan}))
     assert (p.region, p.locality) == ("宜蘭縣", "宜蘭市")
+
+
+def test_district_is_the_county_outside_taiwan_and_none_in_taiwan():
+    kreis = {"lat": "53.8", "lon": "10.37", "display_name": "Bad Oldesloe, Kreis Stormarn, Schleswig-Holstein, Deutschland",
+             "address": {"town": "Bad Oldesloe", "county": "Kreis Stormarn", "state": "Schleswig-Holstein", "country_code": "de"}}
+    p = geocode("Bad Oldesloe", "en", True, FakeHttp({NOMINATIM: [kreis]}))
+    assert (p.region, p.locality, p.district) == ("Schleswig-Holstein", "Bad Oldesloe", "Kreis Stormarn")
+    berlin = {"lat": "52.5", "lon": "13.4", "display_name": "Berlin, Deutschland",
+              "address": {"city": "Berlin", "state": "Berlin", "country_code": "de"}}
+    assert geocode("Berlin", "en", True, FakeHttp({NOMINATIM: [berlin]})).district == "Berlin"
+    assert geocode("坪林", "zh-TW", False, FakeHttp({NOMINATIM: PINGLIN_MIXED})).district is None

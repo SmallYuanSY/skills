@@ -1,6 +1,7 @@
 """Canadian alerts from ECCC (MSC GeoMet): one bbox query for all places, matched by polygon."""
 from datetime import datetime
 
+from ww_errors import WwError
 from ww_alerts_us import NON_WEATHER, _kind
 from ww_geo import point_in_polygon
 from ww_model import Alert, Place
@@ -8,6 +9,7 @@ from ww_model import Alert, Place
 URL = "https://api.weather.gc.ca/collections/weather-alerts/items?f=json&bbox={},{},{},{}&limit=500"
 MARGIN = 0.5  # degrees added around the places so polygons that only just reach them are returned
 LIMIT = 60
+MAX_PAGES = 5  # follow rel=next this many times; more than that is reported as unavailable
 SEVERITY = {"red": "severe", "orange": "moderate", "yellow": "minor"}  # risk_colour_en
 
 
@@ -28,6 +30,8 @@ def _covers(geometry: dict, lat: float, lon: float) -> bool:
 
 def _alert(f: dict) -> Alert:
     p = f["properties"]
+    if p.get("alert_type") == "ended":
+        raise ValueError("ended")
     name = p["alert_name_en"]
     if any(w in name.lower() for w in NON_WEATHER):
         raise ValueError("not weather")
@@ -41,12 +45,28 @@ def _alert(f: dict) -> Alert:
                  _time(p.get("publication_datetime")), "eccc", f"eccc:{f['id']}")
 
 
+def _all_features(http, url: str) -> list:
+    """Every feature of the query; a truncated result must never look like a complete one."""
+    features: list = []
+    for _ in range(MAX_PAGES):
+        data = http(url)
+        features += data.get("features", [])
+        url = next((l.get("href") for l in data.get("links", []) if l.get("rel") == "next" and l.get("href")), None)
+        matched = data.get("numberMatched")
+        if url is None:
+            if isinstance(matched, int) and matched > len(features):
+                raise WwError("service_error", "ECCC returned fewer alerts than matched")
+            return features
+    raise WwError("service_error", "ECCC alerts span too many pages")
+
+
 def alerts_for(places: list[Place], http, now: datetime) -> list[list[Alert] | None]:
     lats, lons = [p.lat for p in places], [p.lon for p in places]
-    data = http(URL.format(*(f"{v:g}" for v in (
-        min(lons) - MARGIN, min(lats) - MARGIN, max(lons) + MARGIN, max(lats) + MARGIN))))
+    url = URL.format(*(f"{v:g}" for v in (
+        min(lons) - MARGIN, min(lats) - MARGIN, max(lons) + MARGIN, max(lats) + MARGIN)))
+    features = _all_features(http, url)
     out: list[list[Alert]] = [[] for _ in places]
-    for f in data.get("features", []):
+    for f in features:
         try:
             alert = _alert(f)
             hits = [i for i, p in enumerate(places) if _covers(f["geometry"], p.lat, p.lon)]

@@ -255,6 +255,7 @@ alerts (as of 20:17, current only — not a forecast for later days):
 - 模組怎麼拆（建議一個來源一個檔案，例如 `ww_alerts_ncdr.py`，但不強制）。
 - `Alert.kind` 的確切名稱、severity 的對應表。
 - JMA 區域定義檔、MeteoAlarm 區域對照表要在執行時下載（加快取），還是打包進 repo。要考慮檔案大小。
+- MeteoAlarm 實測：各國 feed 的 area 只有名稱和 geocode，沒有 polygon，且沒有公開的 EMMA_ID 對照表（404）。因此改用正規化後的區域名稱（含 county／Kreis）比對地點的 region、locality、district；feed 只列出生效中的警報，所以沒有警報的地點會顯示為不支援（unsupported）。
 - 點是否在多邊形內、兩點距離的算法（純 Python 就好，不要加相依套件）。
 - 風速門檻、`--detail` 的格式。
 - `dist/` 要用 `tools/translate.py` 重新產生，並通過 `tests/test_package.py`。

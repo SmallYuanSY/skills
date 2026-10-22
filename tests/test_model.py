@@ -32,7 +32,7 @@ def test_every_error_code_has_an_action():
 
 def test_place_new_fields_default_to_none():
     p = Place("x", 1, 2)
-    assert (p.country_code, p.region, p.locality) == (None, None, None)
+    assert (p.country_code, p.region, p.locality, p.district) == (None, None, None, None)
 
 
 def test_report_has_no_alerts_and_next_hour_defaults_to_none():

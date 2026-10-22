@@ -75,6 +75,14 @@ def test_geocode_tokyo_has_japanese_municipality(polite):
     assert "東京" in p.region
 
 
+def test_geocode_german_district(polite):
+    p = geocode("Bad Oldesloe", "en", True, get)
+    assert p.country_code == "de" and "Stormarn" in (p.district or "")
+    time.sleep(1.1)
+    hamburg = geocode("Hamburg", "en", True, get)
+    assert hamburg.country_code == "de" and hamburg.district  # kreisfreie Stadt: county missing, city used
+
+
 def test_reverse_fills_country_for_coordinates(polite):
     p = reverse(40.71, -74.0, "en", get)
     assert p.country_code == "us"
@@ -223,7 +231,12 @@ def test_eccc_shape(polite):
         assert f["id"] and f["geometry"]["type"] in ("Polygon", "MultiPolygon")
         assert p["alert_name_en"] and p["risk_colour_en"] and "expiration_datetime" in p
     time.sleep(1)
-    assert ww_alerts_ca.alerts_for([toronto], get, datetime.now().astimezone())[0] is not None
+    now = datetime.now().astimezone()
+    for f in data["features"]:
+        a = ww_alerts_ca._alert(f) if f["properties"].get("alert_type") != "ended" else None
+        assert a is None or (a.title and a.expires.tzinfo is not None)
+    out = ww_alerts_ca.alerts_for([toronto], get, now)
+    assert len(out) == 1 and isinstance(out[0], list)
 
 
 def test_meteoalarm_germany_shape(polite):
@@ -238,4 +251,8 @@ def test_meteoalarm_germany_shape(polite):
         assert info["event"] and info["severity"] and info["category"] and info["area"]
         assert all("areaDesc" in x for x in info["area"])
     berlin = Place("柏林", 52.52, 13.405, "Europe/Berlin", "de", "Berlin", "Mitte")
-    ww_alerts_eu.alerts_for([berlin], get, datetime.now().astimezone())
+    now = datetime.now().astimezone()
+    parsed = [ww_alerts_eu._alert(w)[0] for w in data["warnings"] if ww_alerts_eu._is_weather(ww_alerts_eu._info(w["alert"]))]
+    assert all(a.title and a.key.startswith("meteoalarm:") and (a.expires is None or a.expires.tzinfo) for a in parsed)
+    out = ww_alerts_eu.alerts_for([berlin], get, now)
+    assert len(out) == 1 and (out[0] is None or isinstance(out[0], list))

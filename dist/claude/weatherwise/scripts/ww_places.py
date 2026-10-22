@@ -32,7 +32,7 @@ def resolve_place(query: str | None, cfg: dict, lang: str, global_search: bool, 
             raise WwError("no_default_location")
         # A default without a country is completed by ensure_default_complete, not here (one reverse per run)
         return Place(d["name"], float(d["lat"]), float(d["lon"]), d.get("timezone"),
-                     d.get("country_code"), d.get("region"), d.get("locality"))
+                     d.get("country_code"), d.get("region"), d.get("locality"), d.get("district"))
     m = COORDS.match(query)
     if m:
         lat, lon = float(m[1]), float(m[2])
@@ -48,7 +48,8 @@ def _with_address(place: Place, lang: str, http) -> Place:
         found = reverse(place.lat, place.lon, lang, http)
     except WwError:
         return place
-    return replace(place, country_code=found.country_code, region=found.region, locality=found.locality)
+    return replace(place, country_code=found.country_code, region=found.region, locality=found.locality,
+                   district=found.district)
 
 
 def _is_district(r: dict, query: str) -> bool:
@@ -126,7 +127,9 @@ def _address_fields(r: dict) -> dict:
         region = addr.get("city")
     locality = next((addr[k] for k in ("suburb", "town", "city_district", "village", "municipality", "city")
                      if addr.get(k) and addr[k] != region), None)
-    return {"country_code": cc, "region": region, "locality": locality}
+    # County-level area (German Kreis) for matching county-based warning feeds; Taiwan's county is the region
+    district = None if cc == "tw" else (addr.get("county") or addr.get("city"))
+    return {"country_code": cc, "region": region, "locality": locality, "district": district}
 
 
 def _japan_prefecture(r: dict, addr: dict) -> str | None:

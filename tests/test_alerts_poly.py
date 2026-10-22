@@ -16,6 +16,7 @@ NIAGARA = Place("Niagara Falls", 43.09, -79.08, "America/Toronto", "ca", "Ontari
 ST_CATHARINES = Place("St. Catharines", 43.16, -79.24, "America/Toronto", "ca", "Ontario")
 TORONTO = Place("多倫多", 43.65, -79.38, "America/Toronto", "ca", "Ontario")
 BERLIN = Place("柏林", 52.52, 13.405, "Europe/Berlin", "de", "Berlin", "Mitte")
+BAD_OLDESLOE = Place("Bad Oldesloe", 53.81, 10.37, "Europe/Berlin", "de", "Schleswig-Holstein", "Bad Oldesloe", "Kreis Stormarn")
 ATLANTIS = Place("Nowhere", 50.0, 10.0, "Europe/Berlin", "de", "Atlantis")
 DE_URL = "https://feeds.meteoalarm.org/api/v1/warnings/feeds-germany"
 
@@ -151,3 +152,51 @@ def test_meteoalarm_countries_registered():
 def test_meteoalarm_fetch_failure_raises():
     with pytest.raises(WwError):
         ww_alerts_eu.alerts_for([BERLIN], FakeHttp({DE_URL: WwError("network_error", "x")}), NOW)
+
+
+def test_meteoalarm_county_matches_normalised_kreis_name():
+    data = json.loads(fixture("meteoalarm_de.json"))
+    rain = data["warnings"][2]["alert"]["info"]
+    assert all(i["area"][0]["areaDesc"] == "Kreis Stormarn" for i in rain)
+    (alerts,) = ww_alerts_eu.alerts_for([BAD_OLDESLOE], de(data), NOW)
+    assert [a.kind for a in alerts] == ["rain"]
+    landkreis = Place("x", 53.8, 10.3, "Europe/Berlin", "de", "Schleswig-Holstein", None, "Landkreis Stormarn")
+    assert ww_alerts_eu.alerts_for([landkreis], de(data), NOW)[0][0].kind == "rain"
+
+
+def test_meteoalarm_unparseable_polygon_falls_back_to_area_name():
+    data = json.loads(fixture("meteoalarm_de.json"))
+    for i in data["warnings"][0]["alert"]["info"]:
+        i["area"] = [{"areaDesc": "Berlin", "polygon": "garbage"}]
+    (alerts,) = ww_alerts_eu.alerts_for([BERLIN], de(data), NOW)
+    assert [a.kind for a in alerts][:1] == ["fog"]
+
+
+def eccc_page(n, matched, nxt=None):
+    f = json.loads(fixture("eccc.json"))["features"]
+    links = [{"rel": "next", "href": nxt}] if nxt else []
+    return {"features": f[:n], "numberMatched": matched, "numberReturned": n, "links": links}
+
+
+def test_eccc_follows_next_link():
+    p1 = eccc_page(1, 2, "https://api.weather.gc.ca/collections/weather-alerts/items?offset=1")
+    p2 = json.loads(fixture("eccc.json"))
+    p2["features"] = p2["features"][1:]
+    pages = iter([p1, p2])
+    h = FakeHttp({"https://api.weather.gc.ca/": lambda url: next(pages)})
+    out = ww_alerts_ca.alerts_for([NIAGARA, ST_CATHARINES], h, NOW)
+    assert len(h.calls) == 2 and [len(x) for x in out] == [1, 1]
+
+
+def test_eccc_truncated_result_raises():
+    with pytest.raises(WwError):
+        ww_alerts_ca.alerts_for([NIAGARA], eccc(eccc_page(1, 600)), NOW)
+    endless = "https://api.weather.gc.ca/collections/weather-alerts/items?offset=1"
+    with pytest.raises(WwError):
+        ww_alerts_ca.alerts_for([NIAGARA], eccc(eccc_page(1, 9, endless)), NOW)
+
+
+def test_eccc_ended_alert_is_skipped():
+    data = json.loads(fixture("eccc.json"))
+    data["features"][0]["properties"]["alert_type"] = "ended"
+    assert ww_alerts_ca.alerts_for([NIAGARA], eccc(data), NOW) == [[]]

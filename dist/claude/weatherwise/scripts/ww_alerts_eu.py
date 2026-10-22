@@ -56,22 +56,48 @@ def _ring(text) -> list[tuple[float, float]]:
     return ring
 
 
+# Admin words that differ between Nominatim and a warning feed for the same area ("Landkreis X" vs "Kreis X").
+# Longest first; keep the list small.
+PREFIXES = ("kreis und stadt ", "kreisfreie stadt ", "landkreis ", "kreis ", "stadt ", "region ", "county ",
+            "province of ", "département de ", "département ", "departement ")
+SUFFIXES = (" county", " province")
+
+
+def _norm(name: str) -> str:
+    n = " ".join(name.casefold().split())
+    for pre in PREFIXES:
+        if n.startswith(pre):
+            n = n[len(pre):]
+            break
+    for suf in SUFFIXES:
+        if n.endswith(suf):
+            n = n[:-len(suf)]
+            break
+    return n
+
+
 def _covers(areas: list[dict], place: Place, names: set[str]) -> bool | None:
-    """True/False when the areas can decide for this place, None when they cannot (no usable polygon or name)."""
+    """True/False when the areas can decide for this place, None when they cannot (no usable polygon or name).
+
+    An area with a usable polygon is decided by the polygon alone; one without (or whose polygons all fail
+    to parse) falls back to its name. In a feed mixing both, a polygon "no" yields False while a name
+    match elsewhere still wins with True."""
     decided = None
     for a in areas:
         polygons = a.get("polygon")
-        if polygons:
-            if isinstance(polygons, str):
-                polygons = [polygons]
-            for text in polygons:
-                try:
-                    if point_in_polygon(place.lat, place.lon, _ring(text)):
-                        return True
-                    decided = False
-                except (ValueError, AttributeError):
-                    continue
-        elif (a.get("areaDesc") or "").casefold() in names:
+        if isinstance(polygons, str):
+            polygons = [polygons]
+        usable = False
+        for text in polygons or []:
+            try:
+                ring = _ring(text)
+            except (ValueError, AttributeError):
+                continue
+            usable = True
+            if point_in_polygon(place.lat, place.lon, ring):
+                return True
+            decided = False
+        if not usable and _norm(a.get("areaDesc") or "") in names:
             return True
     return decided
 
@@ -103,7 +129,7 @@ def alerts_for(places: list[Place], http, now: datetime) -> list[list[Alert] | N
             continue  # one malformed warning must not make the whole country unavailable
     out: list[list[Alert] | None] = []
     for p in places:
-        names = {n.casefold() for n in (p.region, p.locality) if n}
+        names = {_norm(n) for n in (p.region, p.locality, p.district) if n}
         hits, decided = [], False
         for alert, areas in warnings:
             try:
