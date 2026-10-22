@@ -102,7 +102,9 @@ def test_ncdr_summary_is_short_and_about_the_place():
     rain = next(a for a in alerts if a.kind == "rain")
     assert len(rain.summary) <= 60 and "宜蘭" in rain.summary
     ty = next(a for a in alerts if a.kind == "typhoon")
-    assert len(ty.summary) <= 60 and "中心位置" in ty.summary and "2026" not in ty.summary
+    # the forecast position, which gives the time and place the storm comes closest (real fixture text:
+    # "預測23日20時的中心位置在北緯 24.4 度，東經 122.8 度，即在宜蘭的東南東方約 110 公里之處")
+    assert ty.summary == "預測23日20時中心在宜蘭的東南東方約 110 公里"
 
 
 def test_ncdr_time_parses_noon_and_midnight():
@@ -174,3 +176,14 @@ def test_full_county_name_decides_before_the_bare_one():
 def test_summary_normalises_the_region_spelling():
     text = "今日臺中市山區有局部大雨，其他地區請注意"
     assert ww_alerts_tw._summary("rain", text, "台中市") == "今日臺中市山區有局部大雨"
+
+
+def test_typhoon_summary_falls_back_to_the_current_position_without_a_forecast():
+    text = "中度颱風 薔琵（國際命名 CHAMPI）22日21時的中心位置在北緯 21.3 度，東經 124.8 度。"
+    assert ww_alerts_tw._summary("typhoon", text, "宜蘭縣").startswith("中度颱風 薔琵（國際命名 CHAMPI）22日21時")
+
+
+def test_typhoon_forecast_without_a_landmark_is_cut_to_sixty():
+    text = "中度颱風 薔琵（國際命名 CHAMPI）22日21時的中心位置在北緯 21.3 度。預測23日20時的中心位置在北緯 24.4 度，東經 122.8 度，" + "向北" * 40 + "。"
+    s = ww_alerts_tw._summary("typhoon", text, "宜蘭縣")
+    assert s.startswith("預測23日20時的中心位置") and len(s) <= 60

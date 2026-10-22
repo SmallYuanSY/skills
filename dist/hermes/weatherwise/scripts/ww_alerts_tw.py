@@ -96,7 +96,15 @@ def _strip_counties(seg: str) -> str:
 
 def _summary(kind: str, text: str, region: str | None) -> str:
     if kind == "typhoon":
-        # the feed prefixes the prose with machine-readable fields, so start at the named storm
+        # The forecast position says when and where the storm comes closest ("預測23日20時的中心位置在
+        # 北緯 24.4 度，東經 122.8 度，即在宜蘭的東南東方約 110 公里之處"); the coordinates are dropped.
+        m = re.search(r"預測(\d+日\d+時)的中心位置在[^。]*?即在([^，。]*?)(?:之處)?[，。]", text)
+        if m:
+            return f"預測{m.group(1)}中心在{m.group(2)}"[:LIMIT]
+        m = re.search(r"預測\d+日\d+時[^。]*", text)
+        if m:
+            return m.group(0)[:LIMIT]
+        # no forecast: the current position; the feed prefixes the prose with machine-readable fields
         m = re.search(r"(?:輕度|中度|強烈)颱風 [^\s（]+（國際命名[^，。]*中心位置[^，。]*", text)
         if m:
             return m.group(0)[:LIMIT]
