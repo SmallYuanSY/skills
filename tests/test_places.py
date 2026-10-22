@@ -302,3 +302,26 @@ def test_default_completion_abroad_is_localized(config_dir):
     http = FakeHttp({NOMINATIM_REVERSE: lambda u: BERLIN_LOCAL if "accept-language" not in u else BERLIN_ZH})
     ensure_default_complete(cfg, config_dir, "zh-TW", http)
     assert cfg["default"]["region"] == "Berlin"
+
+
+# Real-shaped Nominatim answers (2026-10, reverse without accept-language)
+HONG_KONG = {"lat": "22.28", "lon": "114.16",
+             "display_name": "西半山 Mid-Levels West, 中西區 Central and Western District, 香港島 Hong Kong Island, 香港 Hong Kong, 中国",
+             "address": {"quarter": "西半山 Mid-Levels West", "suburb": "中西區 Central and Western District",
+                         "city_district": "香港島 Hong Kong Island", "city": "香港 Hong Kong", "region": "香港 Hong Kong",
+                         "ISO3166-2-lvl3": "CN-HK", "country": "中国", "country_code": "cn"}}
+OSAKA_KITA = {"lat": "34.7055", "lon": "135.4983", "display_name": "芝田一丁目, 北区, 大阪市, 大阪府, 530-0012, 日本",
+              "address": {"neighbourhood": "芝田一丁目", "suburb": "北区", "city": "大阪市", "province": "大阪府",
+                          "ISO3166-2-lvl4": "JP-27", "postcode": "530-0012", "country": "日本", "country_code": "jp"}}
+
+
+def test_hong_kong_is_hk_not_mainland_china():
+    p = geocode("香港", "zh-TW", True, FakeHttp({NOMINATIM: [HONG_KONG], NOMINATIM_REVERSE: HONG_KONG}))
+    assert p.country_code == "hk"
+    macau = {**HONG_KONG, "address": {**HONG_KONG["address"], "ISO3166-2-lvl3": "CN-MO"}}
+    assert geocode("澳門", "zh-TW", True, FakeHttp({NOMINATIM: [macau], NOMINATIM_REVERSE: macau})).country_code == "mo"
+
+
+def test_osaka_ward_keeps_the_city_for_jma_matching():
+    p = geocode("大阪市北区", "ja", True, FakeHttp({NOMINATIM: [OSAKA_KITA], NOMINATIM_REVERSE: OSAKA_KITA}))
+    assert (p.country_code, p.region, p.locality, p.district) == ("jp", "大阪府", "北区", "大阪市")

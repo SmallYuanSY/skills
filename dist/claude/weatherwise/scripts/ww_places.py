@@ -15,6 +15,7 @@ SMALL_PLACES = {"village", "hamlet", "suburb", "neighbourhood", "quarter", "isol
 CJK = re.compile(r"[\u3400-\u9fff]")
 ADMIN_SUFFIXES = ("區", "鄉", "鎮", "市", "縣")
 OPEN_METEO = "https://api.open-meteo.com/v1/forecast"
+SAR = {"CN-HK": "hk", "CN-MO": "mo"}
 COORDS = re.compile(r"^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$")
 
 
@@ -141,6 +142,8 @@ def _address_fields(r: dict) -> dict:
     """
     addr = r.get("address") or {}
     cc = addr.get("country_code")
+    if cc == "cn":  # Nominatim files Hong Kong and Macau under China, with the SAR as ISO3166-2-lvl3
+        cc = SAR.get(addr.get("ISO3166-2-lvl3"), cc)
     keys = ("city", "county", "state", "province") if cc == "tw" else ("state", "province", "county")
     region = next((addr[k] for k in keys if addr.get(k)), None)
     if not region and cc == "jp":
