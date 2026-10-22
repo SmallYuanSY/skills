@@ -206,7 +206,7 @@ def test_nws_point_shape(polite):
         assert p["id"] and p["event"] and "severity" in p and "description" in p
     time.sleep(1)
     p = Place("Flagstaff", 36.0633, -111.4152, "America/Phoenix", "us", "Arizona")
-    assert ww_alerts_us.alerts_for([p], get, datetime.now().astimezone())[0] is not None
+    assert isinstance(ww_alerts_us.alerts_for([p], get, datetime.now().astimezone())[0], list)
 
 
 def test_hko_warnsum_is_a_dict(polite):
@@ -264,3 +264,16 @@ def test_zh_tw_user_gets_local_language_names_abroad(polite):
     time.sleep(1.1)
     chiyoda = geocode("千代田区", "zh-TW", True, get)
     assert chiyoda.country_code == "jp" and chiyoda.locality == "千代田区"
+
+
+def test_geocode_hong_kong_is_hk(polite):
+    assert geocode("香港", "zh-TW", True, get).country_code == "hk"
+
+
+def test_osaka_ward_matches_osaka_city_in_jma(polite):
+    import ww_alerts_jp
+
+    p = geocode("大阪市北区", "ja", True, get)
+    assert (p.region, p.locality, p.district) == ("大阪府", "北区", "大阪市")
+    codes, office = ww_alerts_jp._match(get(ww_alerts_jp.AREA_URL), p)
+    assert (codes, office) == (["2710000"], "270000")
