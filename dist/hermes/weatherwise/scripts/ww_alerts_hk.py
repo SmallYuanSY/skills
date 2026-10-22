@@ -9,9 +9,11 @@ HKT = timezone(timedelta(hours=8))
 
 # warning-summary key -> kind; anything else is still listed as "other"
 KINDS = {
-    "WRAIN": "rain", "WTCSGNL": "typhoon", "WTS": "thunder", "WMSGNL": "wind",
-    "WHOT": "heat", "WCOLD": "cold", "WFROST": "cold", "WFNTSA": "flood", "WTMW": "marine",
+    "WRAIN": "rain", "WTCSGNL": "typhoon", "WTCPRE8": "typhoon", "WTS": "thunder", "WMSGNL": "wind",
+    "WHOT": "heat", "WCOLD": "cold", "WFROST": "cold", "WFNTSA": "flood",
 }
+# weather only (spec section 3): landslip and tsunami warnings are not listed
+SKIP = {"WL", "WTMW"}
 # signal 8 and above, red and black rainstorm
 SEVERE_CODES = {"TC8NE", "TC8SE", "TC8NW", "TC8SW", "TC9", "TC10", "WRAINR", "WRAINB"}
 
@@ -26,12 +28,13 @@ def _time(s) -> datetime | None:
 def _alerts(data: dict) -> list[Alert]:
     out = []
     for key, w in data.items():
-        if not isinstance(w, dict) or w.get("actionCode") == "CANCEL":
+        if not isinstance(w, dict) or key in SKIP or w.get("actionCode") == "CANCEL" or w.get("code") == "CANCEL":
             continue
         code = w.get("code") or key
-        title = w.get("name") or f"天氣警告 ({code})"
+        # per the API doc, WTCSGNL's name is generic and "type" holds the specific signal
+        title = (w.get("type") if key == "WTCSGNL" else None) or w.get("name") or f"天氣警告 ({code})"
         out.append(Alert(KINDS.get(key, "other"), "severe" if code in SEVERE_CODES else "moderate",
-                         title, title[:LIMIT], w.get("type") or w.get("contents") or title,
+                         title, title[:LIMIT], " ".join(x for x in (w.get("name"), w.get("type")) if x) or title,
                          _time(w.get("expireTime")), _time(w.get("updateTime")), "hko", f"hko:{code}"))
     return out
 

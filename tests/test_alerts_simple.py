@@ -89,3 +89,52 @@ def test_nws_hurricane_is_typhoon_kind():
 def test_providers_registered():
     assert ww_alerts.PROVIDERS["hk"] is ww_alerts_hk.alerts_for
     assert ww_alerts.PROVIDERS["us"] is ww_alerts_us.alerts_for
+
+
+def test_hko_signal_title_is_the_specific_signal_from_type():
+    (alerts,) = ww_alerts_hk.alerts_for([HK1], hko(), NOW)
+    assert "八號東北烈風或暴風信號" in {a.title for a in alerts}
+
+
+def test_hko_cancel_entries_are_skipped():
+    h = hko({"WTCSGNL": {"name": "熱帶氣旋警告信號", "code": "CANCEL", "actionCode": "CANCEL"},
+             "WRAIN": {"name": "黃色暴雨警告信號", "code": "WRAINA", "actionCode": "CANCEL"}})
+    assert ww_alerts_hk.alerts_for([HK1], h, NOW) == [[]]
+
+
+def test_hko_missing_expire_time_is_none():
+    h = hko({"WHOT": {"name": "酷熱天氣警告", "code": "WHOT", "updateTime": "2026-10-22T07:00:00+08:00"}})
+    (alerts,) = ww_alerts_hk.alerts_for([HK1], h, NOW)
+    assert alerts[0].expires is None and alerts[0].kind == "heat"
+
+
+def test_hko_landslip_and_tsunami_are_not_listed():
+    h = hko({"WL": {"name": "山泥傾瀉警告", "code": "WL"}, "WTMW": {"name": "海嘯警告", "code": "WTMW"},
+             "WTCPRE8": {"name": "預警八號熱帶氣旋警告信號之通知", "code": "WTCPRE8"}})
+    (alerts,) = ww_alerts_hk.alerts_for([HK1], h, NOW)
+    assert [(a.key, a.kind) for a in alerts] == [("hko:WTCPRE8", "typhoon")]
+
+
+def test_nws_non_weather_events_are_dropped():
+    h = nws([feature(event="Earthquake Warning", category="Geo"),
+             feature(id="urn:x:2", event="Civil Emergency Message", category="Safety"),
+             feature(id="urn:x:3", event="Tsunami Warning"),  # no category: the name check catches it
+             feature(id="urn:x:4", event="Flood Watch", category="Met")])
+    (alerts,) = ww_alerts_us.alerts_for([NYC], h, NOW)
+    assert [a.title for a in alerts] == ["Flood Watch"]
+
+
+def test_nws_kind_keywords():
+    h = nws([feature(event="Hurricane Force Wind Warning"), feature(id="urn:x:2", event="Extreme Cold Warning"),
+             feature(id="urn:x:3", event="Hurricane Watch")])
+    (alerts,) = ww_alerts_us.alerts_for([NYC], h, NOW)
+    assert [a.kind for a in alerts] == ["wind", "cold", "typhoon"]
+
+
+def test_nws_malformed_feature_is_skipped_not_fatal():
+    bad_id = feature()
+    del bad_id["properties"]["id"]
+    h = nws([bad_id, feature(id="urn:x:2", expires="2026-10-22T23:00:00"),
+             feature(id="urn:x:3", expires="not a time"), feature(id="urn:x:4")])
+    (alerts,) = ww_alerts_us.alerts_for([NYC], h, NOW)
+    assert [a.key for a in alerts] == ["nws:urn:x:4"]
