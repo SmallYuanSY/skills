@@ -121,7 +121,7 @@ Alert(kind, severity, title, areas, summary, onset, expires, source, key)
 
 使用者說「知道可能靠近就該提醒」，所以門檻設得寬：
 
-- 先抓列表，排除已經結束的事件（`todate` 太舊）。只有目前位置在地點 2000 km 以內的事件，才去抓 geometry。
+- 先抓列表，排除已經結束的事件（`todate` 太舊）。只有目前位置在地點 3500 km 以內的事件，才去抓 geometry（五天路徑可以走超過 2000 km；結果不可以取決於同時查詢的其他地點）。
 - 符合任一條件就提醒：
   - 地點落在任何一個預測暴風範圍多邊形內；或
   - 目前位置或預測路徑上任一點，距離地點 800 km 以內。
@@ -131,7 +131,7 @@ Alert(kind, severity, title, areas, summary, onset, expires, source, key)
   - 合併後以當地警報為主（名稱用「薔琵」這種當地名稱），GDACS 只補上距離資訊。
   - 比對不到時兩者都列。寧可重複，也不要漏掉。*（設計者的判斷）*
 - 只有 GDACS、沒有當地官方警報時，要標示「這是熱帶氣旋路徑資訊，不是當地官方警報」，讓 agent 知道要提醒使用者去看當地氣象單位。
-- 800 km 和 2000 km 寫成常數，方便日後調整。*（數值是設計者的判斷）*
+- 800 km 和 3500 km 寫成常數，方便日後調整。*（數值是設計者的判斷）*
 
 ### 5. 過濾與去重
 
@@ -171,7 +171,7 @@ weatherwise [地點 ...] [--global] [--days N] [--lang TAG] [--json]
 
 - **同一個來源，一次執行只抓一次**：NCDR、MeteoAlarm（每國）、HKO、GDACS 列表都是整國或全球一份，抓一次後在本機篩選。JMA 依都道府縣，每縣只抓一次。ECCC 用涵蓋所有地點的 bbox 一次查完。NWS 依座標查，每個地點一次。
 - **預報**：Open-Meteo 用一次請求帶入多組座標（API 支援以逗號分隔的經緯度）。WeatherKit 每個地點一次。
-- **GDACS geometry**：只對 2000 km 內的事件才抓。
+- **GDACS geometry**：只對 3500 km 內的事件才抓。
 - **本機快取**：`~/.cache/weatherwise/`（遵循 `XDG_CACHE_HOME`），依 URL 存放。TTL：警報 5 分鐘（MeteoAlarm 整國 feed 大而慢，15 分鐘）、GDACS 15 分鐘、預報 15 分鐘、Nominatim 查詢結果 30 天。快取壞掉或無法寫入時，直接忽略，不可以因此報錯。來源拒絕的回應（例如 NCDR 限流訊息、無法解析的內容）不寫入快取；若有一小時內的上一份正常資料就改用它，「as of」顯示它的時間。*（TTL 數值是設計者的判斷）*
 - NCDR 的 3 秒限制：同一次執行只會請求一次。被擋時（收到那段 `<Warning>` XML），視為暫時失敗，不重試，該地點的警報輸出 `unavailable`（見下）。
 - 所有請求都帶現有的 `User-Agent`（NWS、Nominatim 都要求）。

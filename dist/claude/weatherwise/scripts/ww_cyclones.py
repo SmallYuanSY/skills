@@ -6,7 +6,7 @@ from ww_cache import features, fetch_checked
 from ww_model import Cyclone, Place
 
 LIST_URL = "https://www.gdacs.org/gdacsapi/api/events/geteventlist/SEARCH?eventlist=TC"
-FETCH_KM = 2000  # only events this close to some place get their geometry fetched
+FETCH_KM = 3500  # only events this close to some place get their geometry fetched; a 5-day track outruns 2000 km
 NEAR_KM = 800  # current position or forecast track within this distance triggers a note
 MAX_AGE_HOURS = 24
 

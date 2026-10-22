@@ -150,3 +150,18 @@ def test_gdacs_cyclone_merges_into_the_ncdr_typhoon_alert():
     typhoon = [a for a in res[0].alerts if a.kind == "typhoon"]
     assert typhoon and typhoon[0].cyclone.name == "CHAMPI-26"
     assert standalone == []
+
+
+def test_far_centroid_with_a_track_passing_close_is_matched():
+    h = _synthetic()
+    h.routes[GEO + "1"]["features"].append({"geometry": {"type": "LineString", "coordinates": [[0.0, 0.0], [22.0, 0.0]]},
+                                            "properties": {"Class": "Line_Line_0", "forecast": True}})
+    place = Place("x", 0.0, 22.5)
+    assert 2400 < ww_geo.distance_km(0, 0, 0, 22.5) < ww_cyclones.FETCH_KM
+    assert names(ww_cyclones.nearby([place], h, GDACS_NOW)) == {"TEST-26": [0]}
+
+
+def test_tokyo_alone_gets_champi_whose_track_passes_close():
+    tokyo = Place("東京", 35.68, 139.69, "Asia/Tokyo", "jp", "東京都", "千代田区")
+    assert ww_geo.distance_km(tokyo.lat, tokyo.lon, 21.2, 124.9) > 2000  # beyond the old fetch radius
+    assert "CHAMPI-26" in names(ww_cyclones.nearby([tokyo], http(), GDACS_NOW))
