@@ -49,6 +49,7 @@ class Cached:
         self.now_ts = now_ts
         self.dir = cache_dir if cache_dir is not None else _default_dir()
         self.memo: dict = {}
+        self.disk_times: dict[str, int] = {}  # url -> when the disk copy we used was written
 
     def __call__(self, url: str, headers: dict | None = None, *, text: bool = False):
         key = (url, text)
@@ -60,6 +61,7 @@ class Cached:
             hit = self._read(path, ttl, text)
             if hit is not None:
                 self.memo[key] = hit[0]
+                self.disk_times[url] = hit[1]
                 return hit[0]
         body = self.http(url, headers, text=text)
         self.memo[key] = body
@@ -67,12 +69,16 @@ class Cached:
             self._write(path, text, body)
         return body
 
+    def fetched_at(self, url: str) -> int | None:
+        """When the data served for this URL was fetched, or None if it came live this run."""
+        return self.disk_times.get(url)
+
     def _read(self, path: Path, ttl: int, text: bool):
         try:
             entry = json.loads(path.read_text(encoding="utf-8"))
             age = self.now_ts - entry["t"]
             if entry["text"] is text and 0 <= age < ttl:
-                return (entry["body"],)
+                return entry["body"], entry["t"]
         except (OSError, ValueError, KeyError, TypeError):
             pass
         return None

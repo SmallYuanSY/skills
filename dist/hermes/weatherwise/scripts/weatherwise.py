@@ -6,26 +6,31 @@
 # weatherwise · Copyright (c) 2026 SmallYuan · MIT License · https://github.com/SmallYuanSY/skills
 """Weather for an agent to read: Open-Meteo by default, Apple WeatherKit when configured.
 
-  weatherwise [place] [--global] [--days N] [--lang TAG] [--json] [--version]
+  weatherwise [place ...] [--global] [--days N] [--lang TAG] [--json] [--detail] [--version]
   weatherwise config show | set-default | set-lang | weatherkit
 """
 import argparse
 import json
 import os
 import sys
+import time
 from datetime import datetime, timezone
-from zoneinfo import ZoneInfo
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+from ww_alerts import collect  # noqa: E402
+from ww_cache import Cached, ttl_for  # noqa: E402
 from ww_config import config_dir, load_config, resolve_lang, weatherkit_settings  # noqa: E402
 from ww_errors import WwError  # noqa: E402
 from ww_http import REPO, VERSION, HttpError, get  # noqa: E402
-from ww_places import resolve_place, with_timezone  # noqa: E402
-from ww_render import render_error, render_report  # noqa: E402
-from ww_sources import fetch_open_meteo, fetch_weatherkit  # noqa: E402
+from ww_places import PAUSE, resolve_place, with_timezone  # noqa: E402
+from ww_render import render, render_error, render_json  # noqa: E402
+from ww_sources import fetch_open_meteo_many, fetch_weatherkit  # noqa: E402
 from ww_setup import ensure_default_complete, remove_weatherkit, set_default, set_lang, set_weatherkit, show  # noqa: E402
 
+MAX_PLACES = 5
+NOMINATIM_HOST = "https://nominatim.openstreetmap.org"
+ALERT_TTL = 300  # the TTL shared by every alert feed in ww_cache.TTLS
 VERSION_LINE = f"weatherwise {VERSION} · by SmallYuan · {REPO}"
 AUTH_FALLBACK = (
     "weatherkit_auth_failed (HTTP {status}), fell back to open-meteo; tell the user their "
@@ -40,43 +45,105 @@ class Parser(argparse.ArgumentParser):
         raise WwError("bad_arguments", message)
 
 
+def _forecasts(places: list, days: int, lang: str, wk, http, now_ts: int):
+    """One Report or WwError per place. Open-Meteo is a single request; WeatherKit is one per place."""
+    out: list = [None] * len(places)
+    notice = None
+    fallback = list(range(len(places)))
+    if wk:
+        fallback = []
+        for i, place in enumerate(places):
+            try:
+                out[i] = fetch_weatherkit(place, days, lang, wk, http, now_ts)
+            except HttpError as e:
+                if e.status in (401, 403):
+                    notice = AUTH_FALLBACK.format(status=e.status)
+                    fallback.append(i)
+                else:
+                    out[i] = WwError("service_error", f"weatherkit HTTP {e.status}")
+            except WwError as e:
+                if e.code == "invalid_key_file":
+                    raise  # the same key signs every place, so this is not a per-place failure
+                out[i] = e
+    if fallback:
+        try:
+            for i, report in zip(fallback, fetch_open_meteo_many([places[i] for i in fallback], days, http)):
+                out[i] = report
+        except WwError as e:
+            for i in fallback:
+                out[i] = e
+    return out, notice
+
+
+def _fetched_live(cached: Cached, prefix: str) -> bool:
+    return any(url.startswith(prefix) and cached.fetched_at(url) is None for url, _ in cached.memo)
+
+
+def _alerts_as_of(cached: Cached, now: datetime) -> datetime:
+    """Alert data older than this run (served from the disk cache) is reported with its own age."""
+    times = [t for url, _ in cached.memo if ttl_for(url) == ALERT_TTL and (t := cached.fetched_at(url)) is not None]
+    return datetime.fromtimestamp(min(times), timezone.utc) if times else now
+
+
 def run_weather(argv: list[str], http, now: datetime | None) -> str:
     p = Parser(prog="weatherwise")
-    p.add_argument("place", nargs="?")
+    p.add_argument("places", nargs="*")
     p.add_argument("--global", dest="global_search", action="store_true")
-    p.add_argument("--days", type=int, default=3)
+    p.add_argument("--days", type=int)
     p.add_argument("--lang")
     p.add_argument("--json", action="store_true")
+    p.add_argument("--detail", action="store_true")
     p.add_argument("--version", action="store_true")
-    a = p.parse_args(argv)
+    a = p.parse_intermixed_args(argv)
     if a.version:
         return VERSION_LINE
+    if len(a.places) > MAX_PLACES:
+        raise WwError("too_many_places", str(len(a.places)))
 
+    now = now or datetime.now(timezone.utc)
+    http = Cached(http, int(now.timestamp()))
     cfg = load_config(config_dir())
     lang = resolve_lang(a.lang, cfg)
     wk = weatherkit_settings(cfg)  # config mistakes stop here, before any request
-    if not a.place:
+    if not a.places:
         ensure_default_complete(cfg, config_dir(), lang, http)
-    place = with_timezone(resolve_place(a.place, cfg, lang, a.global_search, http), http)
-    days = min(max(a.days, 1), 10)
-    local_now = (now or datetime.now(timezone.utc)).astimezone(ZoneInfo(place.timezone))
+    queries = a.places or [None]
+    days = min(max(a.days if a.days is not None else (3 if len(queries) == 1 else 1), 1), 10)
 
-    notice = None
-    if wk:
+    resolved: list = []  # (Place | None, WwError | None) per query
+    for q in queries:
+        if _fetched_live(http, NOMINATIM_HOST):
+            time.sleep(PAUSE)  # Nominatim allows one request per second, and the last place just used it
         try:
-            report = fetch_weatherkit(place, days, lang, wk, http, int(local_now.timestamp()))
-        except HttpError as e:
-            if e.status not in (401, 403):
-                raise WwError("service_error", f"weatherkit HTTP {e.status}") from None
-            notice = AUTH_FALLBACK.format(status=e.status)
-            report = fetch_open_meteo(place, days, http)
+            resolved.append((with_timezone(resolve_place(q, cfg, lang, a.global_search, http), http), None))
+        except WwError as e:
+            if len(queries) == 1:
+                raise
+            resolved.append((None, e))
+
+    ok = [i for i, (place, _) in enumerate(resolved) if place is not None]
+    reports: list = [e for _, e in resolved]
+    if ok:
+        got, notice = _forecasts([resolved[i][0] for i in ok], days, lang, wk, http, int(now.timestamp()))
+        for i, r in zip(ok, got):
+            reports[i] = r
     else:
-        report = fetch_open_meteo(place, days, http)
+        notice = None
+    errors = [r for r in reports if isinstance(r, WwError)]
+    if len(errors) == len(reports):
+        raise errors[0]
+
+    places = [resolved[i][0] for i in ok]
+    per_place, cyclones = collect(places, http, now)
+    alerts: list = [None] * len(resolved)
+    for i, pa in zip(ok, per_place):
+        alerts[i] = pa
+    cyclones = [(c, [ok[j] for j in idx]) for c, idx in cyclones]  # back to positions in the request
+    entries = [(resolved[i][0], reports[i], alerts[i]) for i in range(len(resolved))]
 
     if a.json:
-        out = {"source": report.source, **({"notice": notice} if notice else {}), "data": report.raw}
-        return json.dumps(out, ensure_ascii=False, indent=2)
-    return render_report(report, place, local_now, notice)
+        return json.dumps(render_json(entries, cyclones, notice), ensure_ascii=False, indent=2)
+    return render(entries, cyclones, now, _alerts_as_of(http, now), days, notice, a.detail)
 
 
 def run_config(argv: list[str], http, now: datetime | None) -> str:

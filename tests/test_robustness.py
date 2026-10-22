@@ -9,9 +9,9 @@ from conftest import NOW, OPEN_METEO, TAIPEI_DEFAULT, WEATHERKIT, FakeHttp
 from ww_config import load_config, save_config
 from ww_errors import WwError
 from ww_http import HttpError
-from ww_model import Place
+from ww_model import Place, PlaceAlerts
 from ww_places import NOMINATIM, OPEN_METEO as OM_URL, geocode, with_timezone
-from ww_render import render_report
+from ww_render import render
 from ww_sources import parse_open_meteo, parse_weatherkit
 
 OM = "https://api.open-meteo.com/"
@@ -76,9 +76,10 @@ def test_null_temperatures_render_as_unknown():
             "current": {**OPEN_METEO["current"], "temperature_2m": None, "apparent_temperature": None},
             "daily": {**OPEN_METEO["daily"], "temperature_2m_max": [None, 27.4]}}
     report = parse_open_meteo(data)
-    out = render_report(report, Place("台北市", 25.033, 121.565, "Asia/Taipei"), NOW)
-    assert "current: Partly Cloudy, unknown, feels unknown" in out
-    assert "2026-10-07 Wed: Cloudy, 22–unknown" in out
+    place = Place("台北市", 25.033, 121.565, "Asia/Taipei")
+    out = render([(place, report, PlaceAlerts("ok", []))], [], NOW, NOW, 3, None, False)
+    assert "now: Partly Cloudy unknown" in out
+    assert "2026-10-07 Wed: Cloudy, 22–unknown°C" in out
 
 
 def test_weatherkit_schema_change_is_a_service_error():
@@ -98,7 +99,7 @@ def test_open_meteo_schema_change_is_a_service_error():
 def test_unexpected_exception_never_shows_a_traceback(config_dir, capsys):
     save_config(config_dir, {"default": TAIPEI_DEFAULT})
 
-    def explode(url, headers=None):
+    def explode(url, headers=None, *, text=False):
         raise RuntimeError("secret detail that must not be printed")
 
     code, out = run([], explode, capsys)

@@ -1,41 +1,209 @@
-"""Turns a Report into plain key: value lines for the model to read."""
+"""Turns reports, alerts and cyclones into plain key: value lines for the model to read."""
 from datetime import date, datetime
+from zoneinfo import ZoneInfo
 
+import ww_cyclones
+from ww_alerts import CAP
 from ww_errors import ACTIONS, WwError
-from ww_model import Place, Report
+from ww_model import SEVERITY_ORDER, Alert, Cyclone, Place, PlaceAlerts, Report
 
 # Weekday names come from here, not strftime("%a"), which follows the machine's locale
 WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+STRONG_WIND_KMH = 40  # below this, wind is only mentioned while a wind alert is active
+ASOF = "current only — not a forecast for later days"
+NO_ALERTS = "do not tell the user there are none"
+SEVERITY_RANK = {s: i for i, s in enumerate(SEVERITY_ORDER)}
+
+Entry = tuple  # (Place | None, Report | WwError, PlaceAlerts | None); place is None when it could not be resolved
 
 
 def _or_unknown(value: float | None, fmt: str, suffix: str = "") -> str:
     return "unknown" if value is None else f"{value:{fmt}}{suffix}"
 
 
-def render_report(report: Report, place: Place, now: datetime, notice: str | None = None) -> str:
-    lines = []
-    if notice:
-        lines.append(f"notice: {notice}")
-    lines.append(f"source: {report.source}")
-    lines.append(f"location: {place.name} ({place.lat:.3f}, {place.lon:.3f}) timezone={place.timezone}")
-    lines.append(f"local_time: {now:%Y-%m-%dT%H:%M} {WEEKDAYS[now.weekday()]}")
+def _local(dt: datetime, place: Place) -> datetime:
+    return dt.astimezone(ZoneInfo(place.timezone or "UTC"))
+
+
+def _show_wind(report: Report, pa: PlaceAlerts | None) -> bool:
+    if pa is not None and any(a.kind == "wind" for a in pa.alerts):
+        return True
+    w = report.current.wind_kmh if report.current else None
+    return w is not None and w >= STRONG_WIND_KMH
+
+
+def _now_text(report: Report, pa: PlaceAlerts | None) -> str:
     c = report.current
-    if c:
-        lines.append(
-            f"current: {c.condition}, {_or_unknown(c.temperature, '.1f', '°C')}, "
-            f"feels {_or_unknown(c.feels_like, '.1f', '°C')}, humidity {_or_unknown(c.humidity, '.0f', '%')}, "
-            f"wind {_or_unknown(c.wind_kmh, '.0f', ' km/h')}, UV {_or_unknown(c.uv, '.0f')}"
-        )
-    if report.days:
-        lines.append("daily:")
-        for d in report.days:
-            weekday = WEEKDAYS[date.fromisoformat(d.date).weekday()]
-            lines.append(
-                f"  {d.date} {weekday}: {d.condition}, "
-                f"{_or_unknown(d.temp_min, '.0f')}–{_or_unknown(d.temp_max, '.0f')}°C, "
-                f"precipitation chance {_or_unknown(d.precip_chance, '.0f', '%')}"
-            )
+    text = f"{c.condition} {_or_unknown(c.temperature, '.0f', '°C')}"
+    if _show_wind(report, pa):
+        text += f", wind {_or_unknown(c.wind_kmh, '.0f', ' km/h')}"
+    return text
+
+
+def _day_text(d) -> str:
+    weekday = WEEKDAYS[date.fromisoformat(d.date).weekday()]
+    return (f"{d.date} {weekday}: {d.condition}, {_or_unknown(d.temp_min, '.0f')}–"
+            f"{_or_unknown(d.temp_max, '.0f')}°C, rain {_or_unknown(d.precip_chance, '.0f', '%')}")
+
+
+def _error_lines(err: WwError, prefix: str = "") -> list[str]:
+    head = f"error: {err.code}" + (f" ({err.detail})" if err.detail else "")
+    return [f"{prefix}{head}", f"    action: {ACTIONS[err.code]}"]
+
+
+def _until(a: Alert, place: Place) -> str:
+    return f"until {_local(a.expires, place):%m-%d %H:%M}" if a.expires else ""
+
+
+def _alert_lines(entries: list, multi: bool, detail: bool) -> list[str]:
+    """One line per alert key; places sharing a key are tagged [i], and per-place variants
+    of the same key (rain levels differ between townships) share the line."""
+    groups: dict[str, list[tuple[int, Alert]]] = {}
+    hidden = []
+    for i, (place, report, pa) in enumerate(entries):
+        if place is None or pa is None:
+            continue
+        shown = pa.alerts if detail else pa.alerts[:CAP]
+        for a in shown:
+            groups.setdefault(a.key, []).append((i, a))
+        if len(pa.alerts) > len(shown):
+            hidden.append((i, len(pa.alerts) - len(shown)))
+
+    ordered = sorted(groups.values(), key=lambda g: min(SEVERITY_RANK.get(a.severity, 9) for _, a in g))
+    lines = []
+    for group in ordered:
+        best_i, best = min(group, key=lambda x: SEVERITY_RANK.get(x[1].severity, 9))
+        titles: dict[str, list[int]] = {}
+        for i, a in sorted(group, key=lambda x: SEVERITY_RANK.get(x[1].severity, 9)):
+            titles.setdefault(a.title, []).append(i)
+        if multi:
+            title = " / ".join(t + " " + "".join(f"[{i + 1}]" for i in sorted(ix)) for t, ix in titles.items())
+        else:
+            title = best.title
+        rest = ", ".join(x for x in (best.summary, _until(best, entries[best_i][0])) if x)
+        line = f"  - [{best.severity}] {title}" + (f": {rest}" if rest else "")
+        for i, a in group:
+            if a.cyclone is not None:
+                line += "; " + ww_cyclones.describe(a.cyclone, entries[i][0]) + (f" [{i + 1}]" if multi else "")
+        lines.append(line)
+        if detail and best.detail:
+            lines += [f"      {part}" for part in best.detail.splitlines()]
+    for i, n in hidden:
+        lines.append(f"  - {f'[{i + 1}] ' if multi else ''}+{n} more (run again with --detail)")
+    return lines
+
+
+def _status_lines(entries: list, fetched_at: datetime, multi: bool) -> list[str]:
+    out = []
+    for i, (place, report, pa) in enumerate(entries):
+        if place is None or pa is None:
+            continue
+        tag = f"[{i + 1}] " if multi else ""
+        if pa.status == "unsupported":
+            out.append(f"{tag}alerts: unsupported (no official alert source here; {NO_ALERTS})")
+        elif pa.status == "unavailable":
+            out.append(f"{tag}alerts: unavailable ({pa.reason}; {NO_ALERTS})")
+        elif not pa.alerts:
+            out.append(f"{tag}alerts: none (as of {_local(fetched_at, place):%H:%M})")
+    return out
+
+
+def render(entries: list[Entry], cyclones: list[tuple[Cyclone, list[int]]], now: datetime,
+           fetched_at: datetime, days: int, notice: str | None, detail: bool) -> str:
+    """Cyclone indices count entries from 0, the same as `entries`."""
+    multi = len(entries) > 1
+    lines = [f"notice: {notice}"] if notice else []
+    first = next((e[0] for e in entries if e[0] is not None), None)
+    home_tz = first.timezone if first else None
+    here = _local(now, first) if first else now
+    lines.append(f"local_time: {here:%Y-%m-%dT%H:%M} {WEEKDAYS[here.weekday()]}")
+
+    if not multi:
+        place, report, pa = entries[0]
+        lines.append(f"location: {place.name} ({place.lat:.3f}, {place.lon:.3f})")
+        if report.current:
+            lines.append(f"now: {_now_text(report, pa)}")
+        if report.next_hour is not None:
+            lines.append(f"next_hour: {report.next_hour}")
+        if report.days:
+            lines.append("daily:")
+            lines += [f"  {_day_text(d)}" for d in report.days[:days]]
+    else:
+        for i, (place, report, pa) in enumerate(entries):
+            tag = f"[{i + 1}] "
+            if place is None or isinstance(report, WwError):
+                lines += _error_lines(report, tag)
+                continue
+            name = place.name
+            if place.timezone != home_tz:
+                t = _local(now, place)
+                name += f" (local_time: {t:%Y-%m-%dT%H:%M} {WEEKDAYS[t.weekday()]})"
+            parts = []
+            if days > 1:
+                head = f"{tag}{name}:" + (f" now {_now_text(report, pa)}" if report.current else "")
+                if report.next_hour is not None:
+                    head += f"; next hour: {report.next_hour}"
+                lines.append(head)
+                lines += [f"    {_day_text(d)}" for d in report.days[:days]]
+                continue
+            if report.current:
+                parts.append(_now_text(report, pa))
+            if report.days:
+                d = report.days[0]
+                parts.append(f"today {_or_unknown(d.temp_min, '.0f')}–{_or_unknown(d.temp_max, '.0f')}°C, "
+                             f"rain {_or_unknown(d.precip_chance, '.0f', '%')}")
+            line = f"{tag}{name}: " + "; ".join(parts)
+            if report.next_hour is not None:
+                line += f"; next hour: {report.next_hour}"
+            lines.append(line)
+
+    ok = [e for e in entries if e[0] is not None and e[2] is not None]
+    alert_lines = _alert_lines(entries, multi, detail)
+    if alert_lines:
+        asof = f"{_local(fetched_at, first):%H:%M}" if first else ""
+        lines.append(f"alerts (as of {asof}, {ASOF}):")
+        lines += alert_lines
+    if ok:
+        lines += _status_lines(entries, fetched_at, multi)
+
+    if cyclones:
+        lines.append("cyclones (track data, not a local official warning):")
+        for c, indices in cyclones:
+            for i in indices:
+                lines.append(f"  - {ww_cyclones.describe(c, entries[i][0])}" + (f" [{i + 1}]" if multi else ""))
     return "\n".join(lines)
+
+
+def _alert_json(a: Alert) -> dict:
+    iso = lambda dt: dt.isoformat() if dt else None  # noqa: E731
+    out = {"kind": a.kind, "severity": a.severity, "title": a.title, "summary": a.summary, "detail": a.detail,
+           "expires": iso(a.expires), "updated": iso(a.updated), "source": a.source, "key": a.key}
+    if a.cyclone is not None:
+        out["cyclone"] = _cyclone_json(a.cyclone)
+    return out
+
+
+def _cyclone_json(c: Cyclone) -> dict:
+    return {"name": c.name, "level": c.level, "lat": c.lat, "lon": c.lon, "severity_text": c.severity_text,
+            "track": [list(p) for p in c.track]}
+
+
+def render_json(entries: list[Entry], cyclones: list[tuple[Cyclone, list[int]]], notice: str | None) -> dict:
+    places = []
+    for place, report, pa in entries:
+        if isinstance(report, WwError):
+            item = {"location": place.name if place else None,
+                    "error": {"code": report.code, "detail": report.detail, "action": ACTIONS[report.code]}}
+        else:
+            item = {"location": place.name, "source": report.source, "forecast": report.raw}
+        if pa is not None:
+            item["alerts"] = {"status": pa.status, "reason": pa.reason, "items": [_alert_json(a) for a in pa.alerts]}
+        places.append(item)
+    out = {"places": places,
+           "cyclones": [{**_cyclone_json(c), "places": [i + 1 for i in idx]} for c, idx in cyclones]}
+    if notice:
+        out["notice"] = notice
+    return out
 
 
 def render_error(err: WwError) -> str:

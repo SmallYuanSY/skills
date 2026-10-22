@@ -99,3 +99,13 @@ def test_cache_dir_env_override(monkeypatch, tmp_path):
     monkeypatch.delenv("WEATHERWISE_CACHE_DIR")
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "x"))
     assert cache_dir() == tmp_path / "x" / "weatherwise"
+
+
+def test_fetched_at_is_the_disk_write_time_or_none_when_live(tmp_path):
+    http = FakeHttp({ALERTS: "<feed/>"})
+    first = Cached(http, 1000, tmp_path)
+    first(ALERTS, text=True)
+    assert first.fetched_at(ALERTS) is None
+    second = Cached(http, 1100, tmp_path)
+    second(ALERTS, text=True)
+    assert second.fetched_at(ALERTS) == 1000
