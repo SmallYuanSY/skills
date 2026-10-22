@@ -274,3 +274,14 @@ def test_gdacs_failure_says_cyclones_unavailable(config_dir, capsys):
     assert code == 0 and "cyclones: unavailable (gdacs HTTP 503; do not tell the user there is no tropical cyclone)" in out
     code, out = run(["板橋", "--json"], world(**{ww_cyclones.LIST_URL: HttpError(503)}), capsys)
     assert json.loads(out)["cyclones_unavailable"] == "gdacs HTTP 503"
+
+
+def test_official_typhoon_alert_with_failed_geometry_has_no_gdacs_text(config_dir, capsys):
+    """Scenario A: NCDR typhoon alert merged with a GDACS storm whose geometry could not be fetched."""
+    gdacs = json.loads(fixture("gdacs_list.json"))
+    geo = gdacs["features"][0]["properties"]["url"]["geometry"].split("?")[0]
+    code, out = run(["板橋", "礁溪"], world(**{ww_cyclones.LIST_URL: gdacs, geo: HttpError(503)}), capsys)
+    assert code == 0
+    line = next(ln for ln in out.splitlines() if "颱風警報" in ln)
+    assert "GDACS" not in line and "forecast" not in line and "CHAMPI" not in line
+    assert "cyclones (" not in out and "forecast closest" not in out

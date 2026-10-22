@@ -89,6 +89,28 @@ def test_unreadable_geometry_still_reports_the_storm_by_its_centroid():
     assert c.track == [] and c.wind_polygons == [] and idx == [0]  # Taipei ~550 km from the centroid
 
 
+def test_unreadable_geometry_never_presents_current_distance_as_forecast():
+    h = FakeHttp({ww_cyclones.LIST_URL: json.loads(fixture("gdacs_list.json")),
+                  GEO + "1001338": RuntimeError("boom")})
+    (c, _), = ww_cyclones.nearby([TAIPEI], h, GDACS_NOW)
+    one = ww_cyclones.describe(c, TAIPEI)
+    many = ww_cyclones.describe_many(c, [(0, TAIPEI), (1, JIAOXI)])
+    for text in (one, many):
+        assert "forecast track unavailable" in text and "forecast closest" not in text
+        assert text.startswith("CHAMPI-26 (GDACS Red): now ~")
+
+
+def test_garbage_geometry_is_not_cached(tmp_path):
+    from ww_cache import Cached
+    ts = int(GDACS_NOW.timestamp())
+    bad = FakeHttp({ww_cyclones.LIST_URL: json.loads(fixture("gdacs_list.json")), GEO + "1001338": "<html>busy"})
+    ww_cyclones.nearby([TAIPEI], Cached(bad, ts, tmp_path), GDACS_NOW)
+    good = FakeHttp({ww_cyclones.LIST_URL: json.loads(fixture("gdacs_list.json")),
+                     GEO + "1001338": json.loads(fixture("gdacs_geometry.json"))})
+    (c, _), = ww_cyclones.nearby([TAIPEI], Cached(good, ts + 60, tmp_path), GDACS_NOW)
+    assert any(u.startswith(GEO + "1001338") for u, _ in good.calls) and c.track
+
+
 def test_unreadable_geometry_far_from_centroid_is_not_reported():
     h = FakeHttp({ww_cyclones.LIST_URL: json.loads(fixture("gdacs_list.json")),
                   GEO + "1001338": RuntimeError("boom")})

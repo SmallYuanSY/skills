@@ -100,11 +100,6 @@ def _alert_lines(entries: list, multi: bool, detail: bool) -> list[str]:
         until = _until(latest, entries[latest_i][0]) if dated else ""
         rest = ", ".join(x for x in (summary, until) if x)
         line = f"  - [{best.severity}] {title}" + (f": {rest}" if rest else "")
-        cyc = [(i, a.cyclone) for i, a in group if a.cyclone is not None]
-        if cyc:
-            tagged = sorted({i for i, _ in cyc})
-            line += "; " + (ww_cyclones.describe_many(cyc[0][1], [(i, entries[i][0]) for i in tagged])
-                            if multi else ww_cyclones.describe(cyc[0][1], entries[cyc[0][0]][0]))
         lines.append(line)
         if detail and best.detail:
             lines += [f"      {part}" for part in best.detail.splitlines()]
@@ -189,9 +184,14 @@ def render(entries: list[Entry], cyclones: list[tuple[Cyclone, list[int]]], now:
     if ok:
         lines += _status_lines(entries, fetched_at, multi)
 
-    if cyclones:
+    # Official OR GDACS, never both: a storm already carried by a place's official alert is not repeated.
+    covered = {(a.cyclone.name, i) for i, (_, _, pa) in enumerate(entries) if pa
+               for a in pa.alerts if a.cyclone is not None}
+    standalone = [(c, left) for c, indices in cyclones
+                  if (left := [i for i in indices if (c.name, i) not in covered])]
+    if standalone:
         lines.append("cyclones (track data, not a local official warning):")
-        for c, indices in cyclones:
+        for c, indices in standalone:
             lines.append("  - " + (ww_cyclones.describe_many(c, [(i, entries[i][0]) for i in indices]) if multi
                                    else ww_cyclones.describe(c, entries[indices[0]][0])))
     if cyclone_error:

@@ -43,17 +43,16 @@ If the user is going somewhere ("我今天要去礁溪"), pass the destination, 
 - Alerts are current only, not a forecast for later days. The block header shows `as of <time>`: for "tomorrow" or "this weekend", say that an alert is active now and may change.
 - `alerts (as of …)` followed by items: always mention every one. Each item is `[severity] title: summary, until <time>`.
   - Severity, highest first: `[extreme]` (e.g. red light, 超大豪雨, special warning), `[severe]` (orange, 豪雨/大豪雨, warning, typhoon warning), `[moderate]` (yellow, 大雨, advisory), `[minor]`. Lead with the highest.
-  - A typhoon alert's summary is the official forecast position, e.g. `預測23日20時中心在宜蘭的東南東方約 110 公里`: the storm is expected nearest around then. Relay that time and place.
-  - Text after `;` on a typhoon alert line is track data for the same storm (distances, no time): put it in plain words like the cyclone lines below.
+  - A typhoon alert's summary is the official forecast position, e.g. `預測23日20時中心在宜蘭的東南東方約 110 公里`: that is the official forecast position at that time, not necessarily the closest approach. Relay the time and place, e.g. 「官方預測 23 日晚上 8 點，颱風中心約在宜蘭東南東方 110 公里」, and don't call it 最接近 unless the text says so.
   - `[1][2]` tags show which places an item applies to. `超大豪雨 [2] / 大豪雨 [1]` means a different level at each place.
   - `+N more (run again with --detail)`: more alerts exist. Run again with `--detail` if they matter.
 - `alerts: none`: the official source was checked and nothing is active. With several places, status lines carry the place tag: `[2] alerts: none`.
 - `alerts: unsupported`: there is no official source for this place, or its area could not be matched (also a quiet place in a name-only European feed). Never say there are no alerts. If the weather looks severe, or they ask about typhoons or heavy rain, tell them to check the local weather agency.
 - `alerts: unavailable (reason)`: the source failed this time. Never say there are no alerts. Suggest checking the local weather agency, or trying again later.
-- `cyclones (track data, not a local official warning):` is track data only, not an official warning. Tell the user to check the local weather agency. If an official alert for the same storm is listed, use the alert for the warning level and times.
+- `cyclones (track data, not a local official warning):` is track data only, not an official warning. Tell the user to check the local weather agency. A storm that already has an official alert is shown only as that alert, not here.
 - `cyclones: unavailable (reason; …)`: typhoon track data could not be read this time. Never say there is no typhoon. If they ask about typhoons, tell them to check the local weather agency.
-- Cyclone lines give the current distance and direction and the forecast closest distance, but no closest-approach time. Only give a time if an official alert gives one (the typhoon alert's `預測…` summary).
-- Turn compass letters and km into plain words, on cyclone lines and on the track text of a typhoon alert line. Don't read out "SE 470 km". Say "颱風在台灣東南方的海上，之後最接近時大約在宜蘭外海 120 公里". When the alert gives a time: "颱風在台灣東南方的海上，明天晚上 8 點左右最接近，大約在宜蘭外海 110 公里". People don't know which way "southeast" points.
+- Cyclone lines give the current distance and direction and the forecast closest distance, but no closest-approach time. `forecast track unavailable` means only the current position is known: don't invent a forecast distance.
+- Turn compass letters and km into plain words, on cyclone lines and on the position text of a typhoon alert. Don't read out "SE 470 km". Say "颱風在台灣東南方的海上，之後最接近時大約在宜蘭外海 120 公里". When the alert gives a forecast position: "官方預測 23 日晚上 8 點，颱風中心約在宜蘭東南東方 110 公里". People don't know which way "southeast" points.
 - `notice:` always pass it on to the user.
 - `[1] error: ...` with `action:` (or a top-level `error:`): do what the `action:` line says. One failed place doesn't stop the others.
 - Don't mention data sources in the answer.

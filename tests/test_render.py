@@ -47,11 +47,9 @@ def test_single_place_with_alerts_and_cyclone():
         "alerts (as of 20:41, current only — not a forecast for later days):",
         "  - [extreme] 超大豪雨 新北市: 山區, until 10-08 20:00",
     ]
-    assert lines[9].startswith("  - [severe] 颱風警報 中度颱風 薔琵: 海上; CHAMPI-26 (GDACS Red): now ~")
-    assert lines[10:] == [
-        "cyclones (track data, not a local official warning):",
-        "  - " + lines[9].split("; ", 1)[1],
-    ]
+    assert lines[9] == "  - [severe] 颱風警報 中度颱風 薔琵: 海上"  # official alert only: no GDACS text (R23)
+    assert lines[10:] == []
+    assert "GDACS" not in out and "cyclones (" not in out
     assert "source:" not in out
 
 
@@ -198,13 +196,20 @@ def test_typhoon_has_no_until_time():
     assert "  - [severe] 颱風警報 中度颱風 薔琵: 中心位置\n" in out + "\n" and "until" not in out
 
 
-def test_merged_cyclone_text_names_the_storm_once():
+def test_merged_cyclone_is_not_repeated_in_text():
     ty = alert("ncdr:颱風", "severe", "颱風警報", "x", "typhoon", cyclone=CHAMPI)
-    out = go([(BANQIAO, report(), PlaceAlerts("ok", [ty])), (JIAOXI, report(), PlaceAlerts("ok", [ty]))])
-    line = next(ln for ln in out.splitlines() if "CHAMPI" in ln)
-    assert line.count("CHAMPI-26") == 1 and line.count("GDACS Red") == 1
-    assert "; CHAMPI-26 (GDACS Red): now ~" in line and " of [1], ~" in line and " of [2]; forecast closest ~" in line
-    assert line.endswith(" km [1], ~" + line.rsplit("~", 1)[1]) and line.endswith(" km [2]")
+    out = go([(BANQIAO, report(), PlaceAlerts("ok", [ty])), (JIAOXI, report(), PlaceAlerts("ok", [ty]))],
+             [(CHAMPI, [0, 1])])
+    assert "CHAMPI" not in out and "GDACS" not in out and "cyclones (" not in out
+    assert "  - [severe] 颱風警報 [1][2]: x" in out
+
+
+def test_storm_merged_for_one_place_is_standalone_for_the_other():
+    ty = alert("ncdr:颱風", "severe", "颱風警報", "x", "typhoon", cyclone=CHAMPI)
+    out = go([(BANQIAO, report(), PlaceAlerts("ok", [ty])), (JIAOXI, report(), NONE_OK)], [(CHAMPI, [0, 1])])
+    assert "  - [severe] 颱風警報 [1]: x\n" in out + "\n"
+    cyc = out.split("cyclones (track data, not a local official warning):")[1]
+    assert "CHAMPI-26" in cyc and "[2]" in cyc and "[1]" not in cyc
 
 
 def test_variants_with_different_summaries_drop_the_summary_and_expire_latest():

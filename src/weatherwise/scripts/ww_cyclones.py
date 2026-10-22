@@ -69,7 +69,8 @@ def _cyclone(feature: dict, http) -> Cyclone:
     start = _latlon(feature["geometry"]["coordinates"])
     sev = props.get("severitydata", {}).get("severitytext", "")
     try:
-        centroid, track, polygons = _parse_geometry(http(props["url"]["geometry"]), start)
+        geo = fetch_checked(http, props["url"]["geometry"], lambda b: (features(b), b)[1])
+        centroid, track, polygons = _parse_geometry(geo, start)
     except Exception:  # keep a possibly close storm, judged by the list's position alone
         centroid, track, polygons = start, [], []
     return Cyclone(props["eventname"], props.get("alertlevel", ""), centroid[0], centroid[1],
@@ -105,15 +106,24 @@ def _measure(c: Cyclone, place: Place) -> tuple[int, str, int]:
     return _round10(now_km), direction, _round10(closest)
 
 
+NO_TRACK = "forecast track unavailable"
+
+
+def _has_forecast(c: Cyclone) -> bool:
+    return bool(c.track or c.wind_polygons)  # else "closest" would just be the current distance
+
+
 def describe(c: Cyclone, place: Place) -> str:
     """No time: GDACS gives none for the forecast positions."""
     now_km, direction, closest = _measure(c, place)
-    return f"{c.name} (GDACS {c.level}): now ~{now_km} km {direction}, forecast closest ~{closest} km"
+    tail = f"forecast closest ~{closest} km" if _has_forecast(c) else NO_TRACK
+    return f"{c.name} (GDACS {c.level}): now ~{now_km} km {direction}, {tail}"
 
 
 def describe_many(c: Cyclone, places: list[tuple[int, Place]]) -> str:
     """One storm for several places: name and level once, distances tagged [n] per place."""
     m = [(i, _measure(c, p)) for i, p in places]
     now = ", ".join(f"~{n} km {d} of [{i + 1}]" for i, (n, d, _) in m)
-    closest = ", ".join(f"~{k} km [{i + 1}]" for i, (_, _, k) in m)
-    return f"{c.name} (GDACS {c.level}): now {now}; forecast closest {closest}"
+    closest = ("forecast closest " + ", ".join(f"~{k} km [{i + 1}]" for i, (_, _, k) in m)
+               if _has_forecast(c) else NO_TRACK)
+    return f"{c.name} (GDACS {c.level}): now {now}; {closest}"
