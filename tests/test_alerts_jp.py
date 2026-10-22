@@ -111,7 +111,7 @@ def test_jma_one_request_per_office_for_two_tokyo_places():
 
 
 def test_jma_collect_integration():
-    results, _ = ww_alerts.collect([CHIYODA], http(), NOW)
+    results, _, _ = ww_alerts.collect([CHIYODA], http(), NOW)
     assert results[0].status == "ok" and len(results[0].alerts) == 2
 
 

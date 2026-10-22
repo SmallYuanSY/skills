@@ -12,6 +12,7 @@ WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 STRONG_WIND_KMH = 40  # below this, wind is only mentioned while a wind alert is active
 ASOF = "current only — not a forecast for later days"
 NO_ALERTS = "do not tell the user there are none"
+NO_CYCLONES = "do not tell the user there is no tropical cyclone"
 SEVERITY_RANK = {s: i for i, s in enumerate(SEVERITY_ORDER)}
 
 Entry = tuple  # (Place | None, Report | WwError, PlaceAlerts | None); place is None when it could not be resolved
@@ -130,7 +131,8 @@ def _status_lines(entries: list, fetched_at: datetime, multi: bool) -> list[str]
 
 
 def render(entries: list[Entry], cyclones: list[tuple[Cyclone, list[int]]], now: datetime,
-           fetched_at: datetime, days: int, notice: str | None, detail: bool) -> str:
+           fetched_at: datetime, days: int, notice: str | None, detail: bool,
+           cyclone_error: str | None = None) -> str:
     """Cyclone indices count entries from 0, the same as `entries`."""
     multi = len(entries) > 1
     lines = [f"notice: {notice}"] if notice else []
@@ -192,6 +194,8 @@ def render(entries: list[Entry], cyclones: list[tuple[Cyclone, list[int]]], now:
         for c, indices in cyclones:
             lines.append("  - " + (ww_cyclones.describe_many(c, [(i, entries[i][0]) for i in indices]) if multi
                                    else ww_cyclones.describe(c, entries[indices[0]][0])))
+    if cyclone_error:
+        lines.append(f"cyclones: unavailable ({cyclone_error}; {NO_CYCLONES})")
     return "\n".join(lines)
 
 
@@ -210,7 +214,7 @@ def _cyclone_json(c: Cyclone) -> dict:
 
 
 def render_json(entries: list[Entry], cyclones: list[tuple[Cyclone, list[int]]], notice: str | None,
-                queries: list[str | None] | None = None) -> dict:
+                queries: list[str | None] | None = None, cyclone_error: str | None = None) -> dict:
     places = []
     for n, (place, report, pa) in enumerate(entries):
         if isinstance(report, WwError):
@@ -224,6 +228,8 @@ def render_json(entries: list[Entry], cyclones: list[tuple[Cyclone, list[int]]],
         places.append(item)
     out = {"places": places,
            "cyclones": [{**_cyclone_json(c), "places": [i + 1 for i in idx]} for c, idx in cyclones]}
+    if cyclone_error:
+        out["cyclones_unavailable"] = cyclone_error
     if notice:
         out["notice"] = notice
     return out

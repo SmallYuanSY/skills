@@ -133,7 +133,7 @@ def test_ncdr_taiwan_character_variants_match():
 def test_ncdr_through_collect_drops_expired(monkeypatch):
     monkeypatch.setattr(ww_cyclones, "nearby", lambda p, h, n: [])
     monkeypatch.setitem(ww_alerts.PROVIDERS, "tw", ww_alerts_tw.alerts_for)
-    res, _ = ww_alerts.collect([BANQIAO, NANTOU], http(), NCDR_NOW)
+    res, _, _ = ww_alerts.collect([BANQIAO, NANTOU], http(), NCDR_NOW)
     for r in res:
         assert r.status == "ok"
         kinds_ = [a.kind for a in r.alerts]
@@ -143,7 +143,7 @@ def test_ncdr_through_collect_drops_expired(monkeypatch):
 def test_ncdr_unparseable_response_is_unavailable_through_collect(monkeypatch):
     monkeypatch.setattr(ww_cyclones, "nearby", lambda p, h, n: [])
     monkeypatch.setitem(ww_alerts.PROVIDERS, "tw", ww_alerts_tw.alerts_for)
-    res, _ = ww_alerts.collect([BANQIAO], FakeHttp({ww_alerts_tw.FEED: "<feed><entry>"}), NCDR_NOW)
+    res, _, _ = ww_alerts.collect([BANQIAO], FakeHttp({ww_alerts_tw.FEED: "<feed><entry>"}), NCDR_NOW)
     assert res[0].status == "unavailable" and "ParseError" in res[0].reason
 
 

@@ -46,6 +46,7 @@ If the user is going somewhere ("我今天要去礁溪"), pass the destination, 
 - `alerts: unsupported`: there is no official source for this place, or its area could not be matched (also a quiet place in a name-only European feed). Never say there are no alerts. If the weather looks severe, or they ask about typhoons or heavy rain, tell them to check the local weather agency.
 - `alerts: unavailable (reason)`: the source failed this time. Never say there are no alerts. Suggest checking the local weather agency, or trying again later.
 - `cyclones (track data, not a local official warning):` is track data only, not an official warning. Tell the user to check the local weather agency. If an official alert for the same storm is listed, use the alert for the warning level and times.
+- `cyclones: unavailable (reason; …)`: typhoon track data could not be read this time. Never say there is no typhoon. If they ask about typhoons, tell them to check the local weather agency.
 - Cyclone lines give the current distance and direction and the forecast closest distance, but no closest-approach time. Only give a time if an official alert's text gives one.
 - Turn compass letters and km into plain words. Don't read out "SE 470 km". Say "颱風在台灣東南方海面，明天傍晚最接近，大約在宜蘭外海 120 公里" (the time part only when known). People don't know which way "southeast" points.
 - `notice:` always pass it on to the user.

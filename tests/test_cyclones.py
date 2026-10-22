@@ -146,7 +146,7 @@ def test_gdacs_cyclone_merges_into_the_ncdr_typhoon_alert():
         GEO + "1001338": json.loads(fixture("gdacs_geometry.json")),
     })
     now = datetime(2026, 10, 22, 20, 30, tzinfo=timezone(timedelta(hours=8)))
-    res, standalone = ww_alerts.collect([JIAOXI], h, now)
+    res, standalone, _ = ww_alerts.collect([JIAOXI], h, now)
     typhoon = [a for a in res[0].alerts if a.kind == "typhoon"]
     assert typhoon and typhoon[0].cyclone.name == "CHAMPI-26"
     assert standalone == []

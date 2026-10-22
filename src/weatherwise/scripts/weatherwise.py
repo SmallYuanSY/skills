@@ -154,7 +154,7 @@ def run_weather(argv: list[str], http, now: datetime | None) -> str:
         raise errors[0]
 
     places = [resolved[i][0] for i in ok]
-    per_place, cyclones = collect(places, http, now)
+    per_place, cyclones, cyclone_error = collect(places, http, now)
     alerts: list = [None] * len(resolved)
     for i, pa in zip(ok, per_place):
         alerts[i] = pa
@@ -162,8 +162,8 @@ def run_weather(argv: list[str], http, now: datetime | None) -> str:
     entries = [(resolved[i][0], reports[i], alerts[i]) for i in range(len(resolved))]
 
     if a.json:
-        return json.dumps(render_json(entries, cyclones, notice, a.places or [None]), ensure_ascii=False, indent=2)
-    return render(entries, cyclones, now, _alerts_as_of(cached, now), days, notice, a.detail)
+        return json.dumps(render_json(entries, cyclones, notice, a.places or [None], cyclone_error), ensure_ascii=False, indent=2)
+    return render(entries, cyclones, now, _alerts_as_of(cached, now), days, notice, a.detail, cyclone_error)
 
 
 def run_config(argv: list[str], http, now: datetime | None) -> str:

@@ -5,6 +5,7 @@ import urllib.parse
 import pytest
 
 import ww_alerts_tw
+import ww_cyclones
 from conftest import NOW, OPEN_METEO, TAIPEI_DEFAULT, WEATHERKIT, FakeHttp, fixture
 from ww_config import save_config
 from ww_http import HttpError
@@ -41,7 +42,8 @@ def forecast(url):
 
 
 def world(**extra):
-    return FakeHttp({NOM: geocoder, OM: forecast, ww_alerts_tw.FEED: fixture("ncdr.xml"), **extra})
+    return FakeHttp({NOM: geocoder, OM: forecast, ww_alerts_tw.FEED: fixture("ncdr.xml"),
+                     ww_cyclones.LIST_URL: {"features": []}, **extra})
 
 
 def run(argv, http, capsys):
@@ -263,3 +265,12 @@ def test_gdacs_age_counts_toward_as_of(config_dir, capsys):
 def test_json_has_the_query_of_each_place(config_dir, capsys):
     _, out = run(["板橋", "zzzz", "--json"], world(), capsys)
     assert [p["query"] for p in json.loads(out)["places"]] == ["板橋", "zzzz"]
+
+
+def test_gdacs_failure_says_cyclones_unavailable(config_dir, capsys):
+    import ww_cyclones
+    from ww_http import HttpError
+    code, out = run(["板橋"], world(**{ww_cyclones.LIST_URL: HttpError(503)}), capsys)
+    assert code == 0 and "cyclones: unavailable (gdacs HTTP 503; do not tell the user there is no tropical cyclone)" in out
+    code, out = run(["板橋", "--json"], world(**{ww_cyclones.LIST_URL: HttpError(503)}), capsys)
+    assert json.loads(out)["cyclones_unavailable"] == "gdacs HTTP 503"

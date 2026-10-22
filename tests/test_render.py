@@ -239,3 +239,10 @@ def test_json_carries_the_query():
     data = render_json([(BANQIAO, report(), NONE_OK), (None, WwError("place_not_found", "zzzz"), None)], [], None,
                        ["板橋", "zzzz"])
     assert [p["query"] for p in data["places"]] == ["板橋", "zzzz"]
+
+
+def test_gdacs_failure_is_shown_as_unavailable_not_as_no_cyclone():
+    out = render([(BANQIAO, report(), NONE_OK)], [], NOW, NOW, 1, None, False, cyclone_error="gdacs HTTP 503")
+    assert out.splitlines()[-1] == ("cyclones: unavailable (gdacs HTTP 503; "
+                                    "do not tell the user there is no tropical cyclone)")
+    assert "cyclones" not in go([(BANQIAO, report(), NONE_OK)])

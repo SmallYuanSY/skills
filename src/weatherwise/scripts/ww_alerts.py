@@ -2,7 +2,7 @@
 import re
 from collections import defaultdict
 from datetime import datetime
-from typing import Callable
+from typing import Callable, NamedTuple
 
 import ww_alerts_ca
 import ww_alerts_eu
@@ -23,6 +23,12 @@ PROVIDERS: dict[str, Callable] = {
     "hk": ww_alerts_hk.alerts_for, "us": ww_alerts_us.alerts_for, "ca": ww_alerts_ca.alerts_for,
     **{cc: ww_alerts_eu.alerts_for for cc in ww_alerts_eu.COUNTRIES},
 }
+
+
+class Collected(NamedTuple):
+    places: list[PlaceAlerts]  # one per place
+    cyclones: list[tuple[Cyclone, list[int]]]  # not named by a local alert, with their place indices
+    cyclone_error: str | None  # why the GDACS list could not be read; None when it was
 
 
 def _reason(cc: str, e: Exception) -> str:
@@ -53,8 +59,7 @@ def _local_name(c: Cyclone) -> str:
     return re.sub(r"-\d+$", "", c.name)
 
 
-def collect(places: list[Place], http, now: datetime):
-    """Return (one PlaceAlerts per place, cyclones not named by a local alert with their place indices)."""
+def collect(places: list[Place], http, now: datetime) -> Collected:
     results: list[PlaceAlerts | None] = [None] * len(places)
     groups: dict[str | None, list[int]] = defaultdict(list)
     for i, p in enumerate(places):
@@ -78,10 +83,11 @@ def collect(places: list[Place], http, now: datetime):
         for i, alerts in zip(idx, cleaned):
             results[i] = PlaceAlerts("unsupported", []) if alerts is None else PlaceAlerts("ok", alerts)
 
+    cyclone_error = None
     try:
         found = ww_cyclones.nearby(places, http, now)
-    except Exception:  # GDACS is extra information; its failure must not change any place's status
-        found = []
+    except Exception as e:  # GDACS failing must not change any place's status, but must not read as "no cyclone"
+        found, cyclone_error = [], _reason("gdacs", e)
 
     standalone = []
     for cyclone, indices in found:
@@ -97,4 +103,4 @@ def collect(places: list[Place], http, now: datetime):
                 left.append(i)
         if left:
             standalone.append((cyclone, left))
-    return results, standalone
+    return Collected(results, standalone, cyclone_error)
