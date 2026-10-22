@@ -6,6 +6,7 @@ import pytest
 import ww_alerts
 import ww_alerts_tw
 import ww_cyclones
+import ww_geo
 from conftest import FakeHttp, fixture
 from ww_model import Place
 
@@ -80,10 +81,57 @@ def test_gdacs_list_parsed_once_for_many_places():
     assert [u for u, _ in h.calls].count(ww_cyclones.LIST_URL) == 1
 
 
-def test_unreadable_geometry_skips_only_that_event():
+def test_unreadable_geometry_still_reports_the_storm_by_its_centroid():
     h = FakeHttp({ww_cyclones.LIST_URL: json.loads(fixture("gdacs_list.json")),
                   GEO + "1001338": RuntimeError("boom")})
-    assert ww_cyclones.nearby([TAIPEI], h, GDACS_NOW) == []
+    (c, idx), = ww_cyclones.nearby([TAIPEI, BERLIN], h, GDACS_NOW)
+    assert c.name == "CHAMPI-26" and c.level == "Red" and (c.lat, c.lon) == (21.2, 124.9)
+    assert c.track == [] and c.wind_polygons == [] and idx == [0]  # Taipei ~550 km from the centroid
+
+
+def test_unreadable_geometry_far_from_centroid_is_not_reported():
+    h = FakeHttp({ww_cyclones.LIST_URL: json.loads(fixture("gdacs_list.json")),
+                  GEO + "1001338": RuntimeError("boom")})
+    hanoi = Place("河內", 21.03, 105.85, "Asia/Bangkok", "vn")  # ~1900 km: fetched, but beyond NEAR_KM
+    assert ww_cyclones.nearby([hanoi], h, GDACS_NOW) == []
+
+
+def test_malformed_list_entry_skips_only_that_entry():
+    data = json.loads(fixture("gdacs_list.json"))
+    bad = json.loads(json.dumps(data["features"][0]))
+    del bad["geometry"]
+    worse = json.loads(json.dumps(data["features"][0]))
+    del worse["properties"]["eventname"]
+    data["features"] = [bad, worse] + data["features"]
+    h = FakeHttp({ww_cyclones.LIST_URL: data, GEO + "1001338": json.loads(fixture("gdacs_geometry.json"))})
+    assert names(ww_cyclones.nearby([TAIPEI], h, GDACS_NOW)) == {"CHAMPI-26": [0]}
+
+
+def _synthetic(polygon=None):
+    """A storm at 0N 0E with no track, optionally with a square wind area around (0, 1.0)."""
+    feat = {"geometry": {"type": "Point", "coordinates": [0.0, 0.0]},
+            "properties": {"iscurrent": "true", "todate": "2026-10-22T12:00:00", "eventname": "TEST-26",
+                           "alertlevel": "Orange", "url": {"geometry": GEO + "1"}}}
+    geo = {"features": [{"geometry": {"type": "Point", "coordinates": [0.0, 0.0]},
+                         "properties": {"Class": "Point_Centroid"}}]}
+    if polygon:
+        geo["features"].append({"geometry": {"type": "Polygon", "coordinates": [polygon]},
+                                "properties": {"Class": "Poly_Green"}})
+    return FakeHttp({ww_cyclones.LIST_URL: {"features": [feat]}, GEO + "1": geo})
+
+
+def test_place_inside_a_wind_polygon_matches_beyond_near_km():
+    place = Place("x", 0.0, 10.0)  # ~1100 km from the centroid
+    ring = [[9.0, -1.0], [11.0, -1.0], [11.0, 1.0], [9.0, 1.0], [9.0, -1.0]]  # [lon, lat]
+    assert ww_geo.distance_km(0, 0, 0, 10) > ww_cyclones.NEAR_KM
+    assert names(ww_cyclones.nearby([place], _synthetic(ring), GDACS_NOW)) == {"TEST-26": [0]}
+    assert ww_cyclones.nearby([place], _synthetic(), GDACS_NOW) == []  # same place, no polygon
+
+
+def test_place_just_beyond_near_km_is_not_matched_and_just_inside_is():
+    deg = ww_cyclones.NEAR_KM / ww_geo.distance_km(0, 0, 0, 1)
+    assert ww_cyclones.nearby([Place("x", 0.0, deg * 1.02)], _synthetic(), GDACS_NOW) == []
+    assert names(ww_cyclones.nearby([Place("x", 0.0, deg * 0.98)], _synthetic(), GDACS_NOW)) == {"TEST-26": [0]}
 
 
 def test_chain_orders_segments_from_the_centre_outward():

@@ -63,29 +63,30 @@ def _affects(c: Cyclone, place: Place) -> bool:
     return ww_geo.distance_to_path_km(place.lat, place.lon, path) <= NEAR_KM
 
 
+def _cyclone(feature: dict, http) -> Cyclone:
+    props = feature["properties"]
+    start = _latlon(feature["geometry"]["coordinates"])
+    sev = props.get("severitydata", {}).get("severitytext", "")
+    try:
+        centroid, track, polygons = _parse_geometry(http(props["url"]["geometry"]), start)
+    except Exception:  # keep a possibly close storm, judged by the list's position alone
+        centroid, track, polygons = start, [], []
+    return Cyclone(props["eventname"], props.get("alertlevel", ""), centroid[0], centroid[1],
+                   track, polygons, sev)
+
+
 def nearby(places: list[Place], http, now: datetime) -> list[tuple[Cyclone, list[int]]]:
     found = []
     for feature in http(LIST_URL).get("features", []):
-        props = feature.get("properties", {})
-        if not _recent(props, now):
-            continue
-        lat, lon = _latlon(feature["geometry"]["coordinates"])
-        if all(ww_geo.distance_km(p.lat, p.lon, lat, lon) > FETCH_KM for p in places):
-            continue
         try:
-            geo = http(props["url"]["geometry"])
-        except Exception:  # one unreadable event must not hide the others
+            if not _recent(feature["properties"], now):
+                continue
+            lat, lon = _latlon(feature["geometry"]["coordinates"])
+            if all(ww_geo.distance_km(p.lat, p.lon, lat, lon) > FETCH_KM for p in places):
+                continue
+            cyclone = _cyclone(feature, http)
+        except (KeyError, IndexError, TypeError, ValueError, AttributeError):  # malformed entry
             continue
-        centroid, track, polygons = _parse_geometry(geo, _latlon(feature["geometry"]["coordinates"]))
-        cyclone = Cyclone(
-            name=props["eventname"],
-            level=props.get("alertlevel", ""),
-            lat=centroid[0],
-            lon=centroid[1],
-            track=track,
-            wind_polygons=polygons,
-            severity_text=props.get("severitydata", {}).get("severitytext", ""),
-        )
         indices = [i for i, p in enumerate(places) if _affects(cyclone, p)]
         if indices:
             found.append((cyclone, indices))
