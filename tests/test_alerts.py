@@ -136,3 +136,19 @@ def test_gdacs_failure_does_not_change_alert_status(monkeypatch):
     monkeypatch.setattr(ww_cyclones, "nearby", boom)
     res, cyclones = ww_alerts.collect([BANQIAO], None, NOW)
     assert res[0].status == "ok" and len(res[0].alerts) == 1 and cyclones == []
+
+
+def test_naive_datetime_from_a_provider_marks_the_country_unavailable(monkeypatch):
+    naive = Alert("rain", "minor", "t", "s", "", datetime(2030, 1, 1), None, "ncdr", "k")
+    monkeypatch.setitem(ww_alerts.PROVIDERS, "tw", lambda p, h, n: [[naive]])
+    res, _ = ww_alerts.collect([BANQIAO], None, NOW)
+    assert res[0].status == "unavailable" and "TypeError" in res[0].reason
+
+
+def test_cyclone_with_an_empty_local_name_never_merges(monkeypatch):
+    ty = alert("ty", kind="typhoon", title="某颱風", detail="anything")
+    monkeypatch.setitem(ww_alerts.PROVIDERS, "tw", lambda p, h, n: [[ty]])
+    nameless = Cyclone("-26", "Orange", 21.2, 125.0, [], [], "")
+    monkeypatch.setattr(ww_cyclones, "nearby", lambda p, h, n: [(nameless, [0])])
+    res, cyclones = ww_alerts.collect([BANQIAO], None, NOW)
+    assert cyclones == [(nameless, [0])] and res[0].alerts[0].cyclone is None

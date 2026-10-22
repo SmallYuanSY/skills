@@ -129,3 +129,19 @@ def test_weatherkit_next_hour_in_tokyo():
         r"no rain expected in the next hour|rain for the whole hour|rain starting ~\d\d:\d\d(, heavy)?"
         r"|rain now, stopping ~\d\d:\d\d(, heavy)?|rain for the whole hour, heavy",
         r.next_hour)
+
+
+def test_ncdr_feed_still_has_the_fields_we_parse():
+    import xml.etree.ElementTree as ET
+
+    import ww_alerts_tw
+
+    root = ET.fromstring(get(ww_alerts_tw.FEED, text=True))
+    assert root.find(".//WarningMessage") is None, "rate limited"
+    entries = root.findall(f"{ww_alerts_tw.ATOM}entry")
+    assert entries
+    for e in entries:
+        assert e.findtext(f"{ww_alerts_tw.ATOM}author/{ww_alerts_tw.ATOM}name")
+        assert e.findtext(f"{ww_alerts_tw.ATOM}title")
+        assert e.findtext(f"{ww_alerts_tw.CAP}expires")
+    assert ww_alerts_tw._entries(root) is not None

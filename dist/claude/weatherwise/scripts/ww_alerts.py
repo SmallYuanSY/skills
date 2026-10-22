@@ -4,6 +4,7 @@ from collections import defaultdict
 from datetime import datetime
 from typing import Callable
 
+import ww_alerts_tw
 import ww_cyclones
 from ww_errors import WwError
 from ww_http import HttpError
@@ -11,8 +12,8 @@ from ww_model import SEVERITY_ORDER, Alert, Cyclone, Place, PlaceAlerts
 
 CAP = 6  # alerts listed per place
 
-# country code -> alerts_for(places, http, now) -> list[list[Alert] | None]; providers register themselves
-PROVIDERS: dict[str, Callable] = {}
+# country code -> alerts_for(places, http, now) -> list[list[Alert] | None]
+PROVIDERS: dict[str, Callable] = {"tw": ww_alerts_tw.alerts_for}
 
 
 def _reason(cc: str, e: Exception) -> str:
@@ -60,12 +61,13 @@ def collect(places: list[Place], http, now: datetime):
             per_place = provider([places[i] for i in idx], http, now)
             if len(per_place) != len(idx):
                 raise ValueError("provider returned the wrong number of results")
+            cleaned = [None if a is None else _clean(a, now) for a in per_place]
         except Exception as e:
             for i in idx:
                 results[i] = PlaceAlerts("unavailable", [], _reason(cc, e))
             continue
-        for i, alerts in zip(idx, per_place):
-            results[i] = PlaceAlerts("unsupported", []) if alerts is None else PlaceAlerts("ok", _clean(alerts, now))
+        for i, alerts in zip(idx, cleaned):
+            results[i] = PlaceAlerts("unsupported", []) if alerts is None else PlaceAlerts("ok", alerts)
 
     try:
         found = ww_cyclones.nearby(places, http, now)
@@ -79,7 +81,7 @@ def collect(places: list[Place], http, now: datetime):
         for i in indices:
             merged = False
             for a in results[i].alerts:
-                if a.kind == "typhoon" and name in f"{a.title} {a.detail}".lower():
+                if name and a.kind == "typhoon" and name in f"{a.title} {a.detail}".lower():
                     a.cyclone = cyclone
                     merged = True
             if not merged:
