@@ -38,6 +38,13 @@ def _norm(s: str) -> str:
     return s.replace("台", "臺")  # same length, so indices carry over to the original text
 
 
+def _bare(region: str) -> str:
+    """臺中市 -> 臺中: the text also names counties without 縣/市 ("基隆、臺北…地區及臺中、南投山區").
+    The bare name matches the full one too; 新竹/嘉義 then match both county and city (accepted)."""
+    norm = _norm(region)
+    return norm[:-1] if norm.endswith(("縣", "市")) and len(norm) > 2 else norm
+
+
 def _severity(kind: str, text: str) -> str:
     if kind == "typhoon":
         return "severe"  # words elsewhere in the long text must not escalate it
@@ -64,12 +71,13 @@ def _title(kind: str, title: str, text: str) -> str:
 
 
 def _scope(text: str, region: str | None) -> str:
-    """The clauses that name the place's county; the whole text when none does."""
+    """The clauses that name the place's county (by full name if any does, so 新竹市's orange light
+    is not 新竹縣's yellow one; else by bare name); the whole text when none does."""
     if region:
-        norm = _norm(region)
-        clauses = [c for c in re.split(r"[，。；;\n]", text) if norm in _norm(c)]
-        if clauses:
-            return "，".join(clauses)
+        for name in (_norm(region), _bare(region)):
+            clauses = [c for c in re.split(r"[，。；;\n]", text) if name in _norm(c)]
+            if clauses:
+                return "，".join(clauses)
     return text
 
 
@@ -94,16 +102,17 @@ def _summary(kind: str, text: str, region: str | None) -> str:
             return m.group(0)[:LIMIT]
     elif region:
         norm = _norm(text)
-        first = None
-        for seg in _segments(norm):
-            if region in seg:
-                start = norm.index(seg)
-                cleaned = _strip_counties(text[start:start + len(seg)])
-                if len(cleaned) > 6:  # shorter is just what is left of a county list
-                    return cleaned[:LIMIT]
-                first = first or cleaned
-        if first:
-            return first[:LIMIT]
+        for name in (_norm(region), _bare(region)):  # full name first, as in _scope
+            first = None
+            for seg in _segments(norm):
+                if name in seg:
+                    start = norm.index(seg)
+                    cleaned = _strip_counties(text[start:start + len(seg)])
+                    if len(cleaned) > 6:  # shorter is just what is left of a county list
+                        return cleaned[:LIMIT]
+                    first = first or cleaned
+            if first:
+                return first[:LIMIT]
     return text.strip()[:LIMIT]
 
 
@@ -155,7 +164,7 @@ def alerts_for(places: list[Place], http, now: datetime) -> list[list[Alert] | N
         if not p.region:
             out.append(None)
             continue
-        region = _norm(p.region)
+        name = _bare(p.region)
         out.append([_alert(it, p.region) for it in entries
-                    if it["title"] == "颱風" or region in _norm(it["text"])])
+                    if it["title"] == "颱風" or name in _norm(it["text"])])
     return out

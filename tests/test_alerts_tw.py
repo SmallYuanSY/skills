@@ -15,7 +15,8 @@ NCDR_NOW = datetime(2026, 10, 22, 20, 30, tzinfo=TPE)
 BANQIAO = Place("板橋區", 25.011, 121.459, "Asia/Taipei", "tw", "新北市", "板橋區")
 JIAOXI = Place("礁溪鄉", 24.827, 121.775, "Asia/Taipei", "tw", "宜蘭縣", "礁溪鄉")
 TAIPEI = Place("士林區", 25.09, 121.52, "Asia/Taipei", "tw", "臺北市", "士林區")
-NANTOU = Place("x", 23.9, 120.69, "Asia/Taipei", "tw", "南投縣", "x")  # not in the rain list
+NANTOU = Place("x", 23.9, 120.69, "Asia/Taipei", "tw", "南投縣", "x")  # only as bare "南投" in the rain text
+PINGTUNG = Place("x", 22.67, 120.49, "Asia/Taipei", "tw", "屏東縣", "x")  # not in the rain list
 NO_REGION = Place("板橋", 25.01, 121.46, "Asia/Taipei", "tw")
 
 
@@ -45,9 +46,21 @@ def test_ncdr_is_requested_once_as_text():
 
 
 def test_ncdr_filters_by_county():
-    banqiao, jiaoxi, nantou = run([BANQIAO, JIAOXI, NANTOU])
+    banqiao, jiaoxi, pingtung = run([BANQIAO, JIAOXI, PINGTUNG])
     assert "rain" in kinds(banqiao) and "rain" in kinds(jiaoxi)
-    assert "rain" not in kinds(nantou)
+    assert "rain" not in kinds(pingtung)
+
+
+KEELUNG = Place("x", 25.13, 121.74, "Asia/Taipei", "tw", "基隆市", "x")
+TAICHUNG = Place("x", 24.15, 120.67, "Asia/Taipei", "tw", "台中市", "x")
+
+
+def test_ncdr_matches_counties_written_without_the_suffix():
+    # real clause: "基隆、臺北、新竹、苗栗、花蓮地區及臺中、南投山區有局部大雨發生的機率"
+    for alerts in run([KEELUNG, NANTOU, TAICHUNG]):
+        rain = next(a for a in alerts if a.kind == "rain")
+        assert (rain.title, rain.severity) == ("大雨", "moderate")
+        assert "有局部大雨" in rain.summary and len(rain.summary) <= 60
 
 
 def test_ncdr_typhoon_covers_every_place():
@@ -149,3 +162,15 @@ def test_a_single_county_in_a_summary_is_kept():
 def test_summary_uses_the_next_clause_when_the_first_is_only_a_county_list():
     text = "基隆市、新北市、桃園市局部地區，新北市山區有局部大雨"
     assert ww_alerts_tw._summary("wind", text, "新北市") == "新北市山區有局部大雨"
+
+
+def test_full_county_name_decides_before_the_bare_one():
+    hsinchu_county = Place("x", 24.8, 121.0, "Asia/Taipei", "tw", "新竹縣", "x")
+    chiayi_city = Place("x", 23.48, 120.45, "Asia/Taipei", "tw", "嘉義市", "x")
+    for p in (hsinchu_county, chiayi_city):  # yellow, although 新竹市 / 嘉義縣 are orange
+        assert by_kind(p)["wind"].title == "強風 黃色燈號"
+
+
+def test_summary_normalises_the_region_spelling():
+    text = "今日臺中市山區有局部大雨，其他地區請注意"
+    assert ww_alerts_tw._summary("rain", text, "台中市") == "今日臺中市山區有局部大雨"
