@@ -119,7 +119,7 @@ def _alert(item: dict, region: str | None) -> Alert:
     kind = KINDS[item["title"]]
     text = item["text"]
     scoped = _scope(text, region)
-    return Alert(kind, _severity(kind, scoped), _title(kind, item["title"], scoped), _summary(kind, text, region), text,
+    return Alert(kind, _severity(kind, scoped), _title(kind, item["title"], text if kind == "typhoon" else scoped), _summary(kind, text, region), text,
                  item["expires"], item["updated"], "ncdr", "ncdr:" + item["title"])
 
 
