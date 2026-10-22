@@ -3,6 +3,7 @@ import sys
 sys.dont_write_bytecode = True  # keep __pycache__ out of src/, which the translator copies
 
 from datetime import datetime, timezone
+from pathlib import Path
 
 import pytest
 from cryptography.hazmat.primitives import serialization
@@ -56,7 +57,7 @@ class FakeHttp:
         self.routes = routes
         self.calls: list[tuple[str, dict | None]] = []
 
-    def __call__(self, url: str, headers: dict | None = None):
+    def __call__(self, url: str, headers: dict | None = None, *, text: bool = False):
         self.calls.append((url, headers))
         for prefix, resp in self.routes.items():
             if url.startswith(prefix):
@@ -84,3 +85,18 @@ def p8_key(tmp_path):
     path.parent.mkdir()
     path.write_bytes(pem)
     return path
+
+
+FIXTURES = Path(__file__).parent / "fixtures" / "alerts"
+
+
+def fixture(name: str) -> str:
+    return (FIXTURES / name).read_text(encoding="utf-8")
+
+
+@pytest.fixture(autouse=True)
+def cache_dir(tmp_path, monkeypatch):
+    """Keep tests away from the real cache."""
+    d = tmp_path / "cache"
+    monkeypatch.setenv("WEATHERWISE_CACHE_DIR", str(d))
+    return d

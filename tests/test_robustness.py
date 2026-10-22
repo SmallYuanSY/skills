@@ -39,7 +39,7 @@ def test_timezone_lookup_failure_is_a_service_error():
 def test_non_json_response_is_a_service_error(monkeypatch):
     monkeypatch.setattr(ww_http.urllib.request, "urlopen", lambda req, timeout: io.BytesIO(b"<html>login</html>"))
     with pytest.raises(WwError) as e:
-        ww_http.get_json("https://example.com/")
+        ww_http.get("https://example.com/")
     assert e.value.code == "service_error"
 
 
@@ -106,3 +106,9 @@ def test_unexpected_exception_never_shows_a_traceback(config_dir, capsys):
     assert out.startswith("error: internal_error (RuntimeError)\naction: ")
     assert "secret detail" not in out
     assert "Traceback" not in out
+
+
+def test_text_mode_returns_the_decoded_body(monkeypatch):
+    body = "<feed>颱風</feed>".encode()
+    monkeypatch.setattr(ww_http.urllib.request, "urlopen", lambda req, timeout: io.BytesIO(body))
+    assert ww_http.get("https://example.com/", text=True) == "<feed>颱風</feed>"

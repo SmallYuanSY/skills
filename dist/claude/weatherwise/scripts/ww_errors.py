@@ -11,6 +11,7 @@ ACTIONS = {
     "weatherkit_auth_failed": "nothing was saved; tell the user WeatherKit rejected the key, show them the values above, and ask them to check each one in Apple Developer (a new key can take a few minutes to work); never guess or try other IDs yourself",
     "invalid_key_file": "ask the user for the path to the AuthKey_<KeyID>.p8 file they downloaded from Apple",
     "unsupported_lang": "use a BCP 47 language tag such as zh-TW, en, or ja",
+    "too_many_places": "keep only the places that matter most (for a trip: the destination, plus the start if needed), at most 5, and run again",
     "bad_arguments": "fix the command using the usage in SKILL.md",
     "internal_error": "tell the user weatherwise hit an unexpected problem; try again later, and if it keeps happening, report it at https://github.com/SmallYuanSY/skills/issues",
 }

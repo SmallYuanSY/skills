@@ -34,7 +34,6 @@ def test_free_mode_with_default_place(config_dir, capsys):
         "location: 台北市 (25.033, 121.565) timezone=Asia/Taipei",
         "local_time: 2026-10-07T20:41 Wed",
     ]
-    assert out.splitlines()[-1].startswith("alerts: unsupported")
 
 
 def test_no_config_and_no_place_asks_where(config_dir, capsys):
@@ -48,7 +47,6 @@ def test_weatherkit_mode(config_dir, p8_key, capsys):
     code, out = run([], FakeHttp({WK_AVAIL: WK_AVAILABLE_WITH_ALERTS, WK: WEATHERKIT}), capsys)
     assert code == 0
     assert out.splitlines()[0] == "source: weatherkit"
-    assert out.splitlines()[-1] == "alerts: none"
 
 
 def test_both_sources_give_the_same_weather_lines(config_dir, p8_key, capsys):
@@ -56,7 +54,7 @@ def test_both_sources_give_the_same_weather_lines(config_dir, p8_key, capsys):
     _, free = run(["--days", "2"], FakeHttp({OM: OPEN_METEO}), capsys)
     use_weatherkit(config_dir, p8_key)
     _, paid = run(["--days", "2"], FakeHttp({WK_AVAIL: WK_AVAILABLE_WITH_ALERTS, WK: WEATHERKIT}), capsys)
-    assert free.splitlines()[1:-1] == paid.splitlines()[1:-1]
+    assert free.splitlines()[1:] == paid.splitlines()[1:]
 
 
 def test_auth_failure_falls_back_with_a_notice(config_dir, p8_key, capsys):
@@ -102,7 +100,7 @@ def test_json_wraps_the_raw_data(config_dir, capsys):
 
 def test_version(capsys):
     _, out = run(["--version"], FakeHttp({}), capsys)
-    assert out == "weatherwise 1.0.0 · by SmallYuan · https://github.com/SmallYuanSY/skills"
+    assert out == "weatherwise 2.0.0 · by SmallYuan · https://github.com/SmallYuanSY/skills"
 
 
 def test_bad_arguments_are_reported_for_the_model(config_dir, capsys):

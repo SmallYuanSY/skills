@@ -5,7 +5,7 @@ import urllib.request
 
 from ww_errors import WwError
 
-VERSION = "1.0.0"
+VERSION = "2.0.0"
 REPO = "https://github.com/SmallYuanSY/skills"
 USER_AGENT = f"weatherwise/{VERSION} (+{REPO})"
 
@@ -17,7 +17,7 @@ class HttpError(Exception):
         self.body = body
 
 
-def get_json(url: str, headers: dict | None = None):
+def get(url: str, headers: dict | None = None, *, text: bool = False):
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, **(headers or {})})
     try:
         with urllib.request.urlopen(req, timeout=15) as r:
@@ -30,6 +30,8 @@ def get_json(url: str, headers: dict | None = None):
         raise HttpError(e.code, detail) from None
     except (urllib.error.URLError, TimeoutError, OSError) as e:
         raise WwError("network_error", str(e)) from None
+    if text:
+        return body.decode(errors="replace")
     try:
         return json.loads(body)
     except ValueError:  # e.g. a captive portal's HTML page

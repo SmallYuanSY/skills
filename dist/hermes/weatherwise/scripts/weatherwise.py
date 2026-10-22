@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from ww_config import config_dir, load_config, resolve_lang, weatherkit_settings  # noqa: E402
 from ww_errors import WwError  # noqa: E402
-from ww_http import REPO, VERSION, HttpError, get_json  # noqa: E402
+from ww_http import REPO, VERSION, HttpError, get  # noqa: E402
 from ww_places import resolve_place, with_timezone  # noqa: E402
 from ww_render import render_error, render_report  # noqa: E402
 from ww_sources import fetch_open_meteo, fetch_weatherkit  # noqa: E402
@@ -112,7 +112,7 @@ def run_config(argv: list[str], http, now: datetime | None) -> str:
                           cfg, d, resolve_lang(None, cfg), http, now_ts)
 
 
-def main(argv: list[str] | None = None, *, http=get_json, now: datetime | None = None) -> int:
+def main(argv: list[str] | None = None, *, http=get, now: datetime | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
     try:
         if argv[:1] == ["config"]:

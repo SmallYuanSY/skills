@@ -49,7 +49,7 @@ def _parse_open_meteo(data: dict) -> Report:
             d.get("temperature_2m_min", []), d.get("precipitation_probability_max", []),
         )
     ]
-    return Report("open-meteo", current, days, None, data)
+    return Report("open-meteo", current, days, data)
 
 
 def make_token(wk: dict, now_ts: int) -> str:
@@ -104,10 +104,4 @@ def _parse_weatherkit(data: dict, tz: str, days: int, alerts_available: bool) ->
             start.date().isoformat(), weatherkit_condition(d["conditionCode"]),
             d["temperatureMin"], d["temperatureMax"], None if chance is None else chance * 100,
         ))
-    alerts = None
-    if alerts_available:  # Apple omits weatherAlerts from the response when none are active
-        alerts = [
-            f"{a.get('description', '')} ({a.get('source', '')})"
-            for a in (data.get("weatherAlerts") or {}).get("alerts", [])
-        ]
-    return Report("weatherkit", current, out, alerts, data)
+    return Report("weatherkit", current, out, data)

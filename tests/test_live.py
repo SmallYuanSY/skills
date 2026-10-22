@@ -9,7 +9,7 @@ import pytest
 
 import weatherwise
 from conftest import OPEN_METEO, WEATHERKIT
-from ww_http import get_json
+from ww_http import get
 from ww_model import Place
 from ww_places import geocode, with_timezone
 from ww_sources import fetch_open_meteo, fetch_weatherkit
@@ -41,12 +41,12 @@ def taipei_today() -> str:
 @pytest.fixture
 def polite():
     """Nominatim allows one request per second."""
-    yield get_json
+    yield get
     time.sleep(1.1)
 
 
 def test_open_meteo_returns_every_field_the_fixture_uses():
-    r = fetch_open_meteo(TAIPEI, 3, get_json)
+    r = fetch_open_meteo(TAIPEI, 3, get)
     assert set(OPEN_METEO["current"]) <= set(r.raw["current"])
     assert set(OPEN_METEO["daily"]) <= set(r.raw["daily"])
     assert r.raw["timezone"] == "Asia/Taipei"
@@ -61,7 +61,7 @@ def test_geocode_in_taiwan(polite):
 
 
 def test_geocode_abroad_with_timezone(polite):
-    place = with_timezone(geocode("Tokyo", "en", True, polite), get_json)
+    place = with_timezone(geocode("Tokyo", "en", True, polite), get)
     assert "Tokyo" in place.name
     assert place.timezone == "Asia/Tokyo"
 
@@ -73,24 +73,17 @@ def test_free_mode_end_to_end(config_dir, capsys, polite):
     lines = capsys.readouterr().out.splitlines()
     assert lines[0] == "source: open-meteo"
     assert lines[2].startswith(f"local_time: {taipei_today()}T")
-    assert lines[-1].startswith("alerts: unsupported")
 
 
 @needs_weatherkit
 def test_weatherkit_returns_every_field_the_fixture_uses():
-    r = fetch_weatherkit(TAIPEI, 3, "zh-TW", local_weatherkit(), get_json, int(time.time()))
+    r = fetch_weatherkit(TAIPEI, 3, "zh-TW", local_weatherkit(), get, int(time.time()))
     assert set(WEATHERKIT["currentWeather"]) <= set(r.raw["currentWeather"])
     assert set(WEATHERKIT["forecastDaily"]["days"][0]) <= set(r.raw["forecastDaily"]["days"][0])
     assert r.days[0].date == taipei_today()
-    assert r.alerts is None  # Apple has no alert data for Taiwan (checked 2026-10-07)
 
 
 @needs_weatherkit
-def test_weatherkit_alerts_are_a_list_where_apple_has_them():
-    new_york = Place("New York", 40.71, -74.0, "America/New_York")
-    wk = {**local_weatherkit(), "country_code": "US"}
-    r = fetch_weatherkit(new_york, 1, "en", wk, get_json, int(time.time()))
-    assert isinstance(r.alerts, list)  # [] when nothing is active
 
 
 @needs_weatherkit

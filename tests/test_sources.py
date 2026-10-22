@@ -1,7 +1,7 @@
 import jwt
 import pytest
 
-from conftest import OPEN_METEO, WEATHERKIT, WK_AVAILABLE_NO_ALERTS, WK_AVAILABLE_WITH_ALERTS, FakeHttp
+from conftest import OPEN_METEO, WEATHERKIT, WK_AVAILABLE_WITH_ALERTS, FakeHttp
 from ww_errors import WwError
 from ww_http import HttpError
 from ww_model import Current, Day, Place
@@ -19,7 +19,6 @@ def test_open_meteo_parses_current_and_daily():
     assert r.source == "open-meteo"
     assert r.current == EXPECTED_CURRENT
     assert r.days == EXPECTED_DAYS
-    assert r.alerts is None
 
 
 def test_open_meteo_nulls_become_none():
@@ -51,24 +50,6 @@ def test_weatherkit_matches_open_meteo_and_uses_local_dates():
     # 2026-10-06T16:00Z is already 2026-10-07 in Taipei
     assert [(d.date, d.condition, round(d.precip_chance)) for d in r.days] == [
         ("2026-10-07", "Cloudy", 0), ("2026-10-08", "Rain", 80)]
-    assert r.alerts == []
-
-
-def test_weatherkit_limits_days_and_lists_alerts():
-    data = {**WEATHERKIT, "weatherAlerts": {"alerts": [{"description": "Heavy Rain Advisory", "source": "CWA"}]}}
-    r = parse_weatherkit(data, "Asia/Taipei", 1, alerts_available=True)
-    assert len(r.days) == 1
-    assert r.alerts == ["Heavy Rain Advisory (CWA)"]
-
-
-def test_weatherkit_where_apple_has_no_alerts_is_unsupported():
-    assert parse_weatherkit(WEATHERKIT, "Asia/Taipei", 10, alerts_available=False).alerts is None
-
-
-def test_weatherkit_with_no_active_alerts_is_none():
-    # Apple leaves weatherAlerts out of the response when nothing is active
-    data = {k: v for k, v in WEATHERKIT.items() if k != "weatherAlerts"}
-    assert parse_weatherkit(data, "Asia/Taipei", 10, alerts_available=True).alerts == []
 
 
 def test_weatherkit_request_is_signed(p8_key):
@@ -90,14 +71,6 @@ def test_weatherkit_http_errors_are_left_to_the_caller(p8_key):
     wk = {"team_id": "T", "key_id": "K", "service_id": "S", "key_path": str(p8_key)}
     with pytest.raises(HttpError):
         fetch_weatherkit(TAIPEI, 3, "en", wk, FakeHttp({"https://weatherkit.apple.com/": HttpError(401)}), 0)
-
-
-def test_weatherkit_skips_alerts_where_apple_has_none(p8_key):
-    wk = {"team_id": "T", "key_id": "K", "service_id": "S", "key_path": str(p8_key), "country_code": "TW"}
-    http = FakeHttp({WEATHERKIT_AVAILABILITY: WK_AVAILABLE_NO_ALERTS, WEATHERKIT_URL: WEATHERKIT})
-    r = fetch_weatherkit(TAIPEI, 3, "en", wk, http, 0)
-    assert "weatherAlerts" not in http.calls[1][0]
-    assert r.alerts is None
 
 
 def test_unreadable_key_is_an_invalid_key_file(tmp_path):

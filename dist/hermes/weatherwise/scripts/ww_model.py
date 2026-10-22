@@ -1,6 +1,9 @@
 """What every weather source is turned into before it is printed."""
 import re
 from dataclasses import dataclass, field
+from datetime import datetime
+
+SEVERITY_ORDER = ["extreme", "severe", "moderate", "minor"]
 
 
 @dataclass
@@ -9,6 +12,9 @@ class Place:
     lat: float
     lon: float
     timezone: str | None = None
+    country_code: str | None = None  # lowercase ISO 3166-1 alpha-2
+    region: str | None = None  # Taiwan county/city, Japan prefecture, US state
+    locality: str | None = None  # Taiwan township/district, Japan municipality
 
 
 @dataclass
@@ -35,8 +41,39 @@ class Report:
     source: str  # "open-meteo" or "weatherkit"
     current: Current | None
     days: list[Day]
-    alerts: list[str] | None  # None means this source has no alert data for the place
     raw: dict = field(default_factory=dict)
+    next_hour: str | None = None  # None means this source has no such data (e.g. Open-Meteo)
+
+
+@dataclass
+class Alert:
+    kind: str
+    severity: str  # one of SEVERITY_ORDER
+    title: str
+    summary: str  # at most 60 characters
+    detail: str
+    expires: datetime | None  # aware
+    updated: datetime | None
+    source: str  # e.g. "ncdr"
+    key: str
+
+
+@dataclass
+class PlaceAlerts:
+    status: str  # "ok", "unsupported" or "unavailable"
+    alerts: list[Alert]
+    reason: str = ""
+
+
+@dataclass
+class Cyclone:
+    name: str  # e.g. "CHAMPI-26"
+    level: str  # "Green", "Orange" or "Red"
+    lat: float
+    lon: float
+    track: list[tuple[float, float]]
+    wind_polygons: list[list[tuple[float, float]]]
+    severity_text: str
 
 
 # WMO weather codes (Open-Meteo) -> the same names WeatherKit codes produce
