@@ -56,6 +56,7 @@ class Alert:
     updated: datetime | None
     source: str  # e.g. "ncdr"
     key: str
+    cyclone: "Cyclone | None" = None  # the GDACS cyclone merged into this local alert
 
 
 @dataclass
