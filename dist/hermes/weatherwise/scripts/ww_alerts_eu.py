@@ -2,6 +2,7 @@
 from datetime import datetime
 
 from ww_alerts_us import NON_WEATHER, _kind, _time
+from ww_cache import fetch_checked
 from ww_geo import point_in_polygon
 from ww_model import Alert, Place
 
@@ -119,10 +120,16 @@ def _alert(w: dict) -> tuple[Alert, list[dict]]:
             info["area"])
 
 
+def _warnings(body) -> list:
+    if not isinstance(body, dict) or not isinstance(body.get("warnings", []), list):
+        raise ValueError("not a warning feed")
+    return body.get("warnings", [])
+
+
 def alerts_for(places: list[Place], http, now: datetime) -> list[list[Alert] | None]:
-    data = http(URL.format(COUNTRIES[places[0].country_code]))  # collect passes one country at a time
+    feed = fetch_checked(http, URL.format(COUNTRIES[places[0].country_code]), _warnings)  # one country at a time
     warnings = []
-    for w in data.get("warnings", []):
+    for w in feed:
         try:
             warnings.append(_alert(w))
         except (KeyError, TypeError, ValueError, AttributeError, IndexError):

@@ -124,3 +124,35 @@ def test_is_fresh_means_served_without_a_request(tmp_path):
     c(ALERTS, text=True)
     assert c.is_fresh(ALERTS, text=True) and Cached(http, 1100, tmp_path).is_fresh(ALERTS, text=True)
     assert not Cached(http, 1400, tmp_path).is_fresh(ALERTS, text=True)
+
+
+RATE_LIMITED = "<WarningMessage><Warning>限制存取間隔時間為3秒</Warning></WarningMessage>"
+
+
+def test_evicted_body_is_refetched_next_run(tmp_path):
+    http = FakeHttp({ALERTS: RATE_LIMITED})
+    c = Cached(http, 1000, tmp_path)
+    c(ALERTS, text=True)
+    assert c.evict(ALERTS, text=True) is None  # no good copy to fall back to
+    assert list(tmp_path.iterdir()) == []
+    Cached(http, 1060, tmp_path)(ALERTS, text=True)
+    assert len(http.calls) == 2
+
+
+def test_evict_falls_back_to_the_last_good_copy_with_its_age(tmp_path):
+    good = FakeHttp({ALERTS: "<feed/>"})
+    Cached(good, 1000, tmp_path)(ALERTS, text=True)
+    c = Cached(FakeHttp({ALERTS: RATE_LIMITED}), 1400, tmp_path)  # TTL over, the refetch is rejected
+    assert c(ALERTS, text=True) == RATE_LIMITED
+    assert c.evict(ALERTS, text=True) == "<feed/>"
+    assert c(ALERTS, text=True) == "<feed/>" and c.fetched_at(ALERTS) == 1000
+    later = Cached(good, 1500, tmp_path)
+    later(ALERTS, text=True)  # the good copy stays on disk but is past its TTL, so it is refetched
+    assert len(good.calls) == 2
+
+
+def test_last_good_copy_older_than_an_hour_is_not_used(tmp_path):
+    Cached(FakeHttp({ALERTS: "<feed/>"}), 1000, tmp_path)(ALERTS, text=True)
+    c = Cached(FakeHttp({ALERTS: RATE_LIMITED}), 1000 + 3601, tmp_path)
+    c(ALERTS, text=True)
+    assert c.evict(ALERTS, text=True) is None

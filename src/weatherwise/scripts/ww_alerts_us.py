@@ -1,6 +1,7 @@
 """US alerts from the National Weather Service: one point query per place."""
 from datetime import datetime
 
+from ww_cache import features, fetch_checked
 from ww_model import Alert, Place
 
 URL = "https://api.weather.gov/alerts/active?point={:.4f},{:.4f}"
@@ -50,12 +51,12 @@ def _alert(props: dict) -> Alert:
 
 
 def alerts_for(places: list[Place], http, now: datetime) -> list[list[Alert] | None]:
-    return [_place_alerts(http(URL.format(p.lat, p.lon))) for p in places]
+    return [_place_alerts(fetch_checked(http, URL.format(p.lat, p.lon), features)) for p in places]
 
 
-def _place_alerts(data: dict) -> list[Alert]:
+def _place_alerts(feats: list) -> list[Alert]:
     out = []
-    for f in data.get("features", []):
+    for f in feats:
         try:
             props = f["properties"]
             if _is_weather(props):

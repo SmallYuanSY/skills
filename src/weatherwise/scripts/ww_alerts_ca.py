@@ -1,6 +1,7 @@
 """Canadian alerts from ECCC (MSC GeoMet): one bbox query for all places, matched by polygon."""
 from datetime import datetime
 
+from ww_cache import fetch_checked
 from ww_errors import WwError
 from ww_alerts_us import NON_WEATHER, _kind
 from ww_geo import point_in_polygon
@@ -45,12 +46,18 @@ def _alert(f: dict) -> Alert:
                  _time(p.get("publication_datetime")), "eccc", f"eccc:{f['id']}")
 
 
+def _page(body) -> dict:
+    if not isinstance(body, dict) or not isinstance(body.get("features"), list):
+        raise ValueError("not a feature page")
+    return body
+
+
 def _all_features(http, url: str) -> list:
     """Every feature of the query; a truncated result must never look like a complete one."""
     features: list = []
     for _ in range(MAX_PAGES):
-        data = http(url)
-        features += data.get("features", [])
+        data = fetch_checked(http, url, _page)
+        features += data["features"]
         url = next((l.get("href") for l in data.get("links", []) if l.get("rel") == "next" and l.get("href")), None)
         matched = data.get("numberMatched")
         if url is None:

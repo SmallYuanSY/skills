@@ -4,6 +4,7 @@ import xml.etree.ElementTree as ET
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+from ww_cache import fetch_checked
 from ww_errors import WwError
 from ww_model import Alert, Place
 
@@ -138,13 +139,17 @@ def _alert(item: dict, region: str | None) -> Alert:
                  item["expires"], item["updated"], "ncdr", "ncdr:" + item["title"])
 
 
+def _root(body: str) -> ET.Element:
+    root = ET.fromstring(body)
+    if root.tag == "WarningMessage" or root.find(".//WarningMessage") is not None:
+        raise WwError("service_error", "ncdr rate limited")
+    return root
+
+
 def alerts_for(places: list[Place], http, now: datetime) -> list[list[Alert] | None]:
     if not any(p.region for p in places):
         return [None] * len(places)
-    root = ET.fromstring(http(FEED, text=True))
-    if root.tag == "WarningMessage" or root.find(".//WarningMessage") is not None:
-        raise WwError("service_error", "ncdr rate limited")
-    entries = _entries(root)
+    entries = _entries(fetch_checked(http, FEED, _root, text=True))
     out: list[list[Alert] | None] = []
     for p in places:
         if not p.region:

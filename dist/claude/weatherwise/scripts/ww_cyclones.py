@@ -2,6 +2,7 @@
 from datetime import datetime, timedelta, timezone
 
 import ww_geo
+from ww_cache import features, fetch_checked
 from ww_model import Cyclone, Place
 
 LIST_URL = "https://www.gdacs.org/gdacsapi/api/events/geteventlist/SEARCH?eventlist=TC"
@@ -77,7 +78,7 @@ def _cyclone(feature: dict, http) -> Cyclone:
 
 def nearby(places: list[Place], http, now: datetime) -> list[tuple[Cyclone, list[int]]]:
     found = []
-    for feature in http(LIST_URL).get("features", []):
+    for feature in fetch_checked(http, LIST_URL, features):
         try:
             if not _recent(feature["properties"], now):
                 continue

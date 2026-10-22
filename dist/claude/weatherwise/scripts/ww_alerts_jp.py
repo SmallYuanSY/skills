@@ -1,6 +1,7 @@
 """Japan alerts from JMA bosai: municipality -> class20 code -> forecast office -> that office's warning file."""
 from datetime import datetime
 
+from ww_cache import fetch_checked
 from ww_model import Alert, Place
 
 AREA_URL = "https://www.jma.go.jp/bosai/common/const/area.json"
@@ -123,13 +124,26 @@ def _alerts(code: str, entries: list[dict], report: dict) -> list[Alert]:
     return out
 
 
+def _area(body) -> dict:
+    if not isinstance(body, dict) or not all(isinstance(body.get(t), dict) for t in ("offices", "class20s")):
+        raise ValueError("not an area table")
+    return body
+
+
+def _report(body) -> dict:
+    datetime.fromisoformat(body["reportDatetime"])
+    if not isinstance(body["areaTypes"], list):
+        raise ValueError("no areaTypes")
+    return body
+
+
 def alerts_for(places: list[Place], http, now: datetime) -> list[list[Alert] | None]:
-    area = http(AREA_URL)
+    area = fetch_checked(http, AREA_URL, _area)
     matches = [_match(area, p) for p in places]
     reports: dict[str, dict] = {}
     for m in matches:
         if m and m[1] not in reports:
-            reports[m[1]] = http(WARNING_URL.format(m[1]))
+            reports[m[1]] = fetch_checked(http, WARNING_URL.format(m[1]), _report)
     out: list[list[Alert] | None] = []
     for m in matches:
         if m is None:

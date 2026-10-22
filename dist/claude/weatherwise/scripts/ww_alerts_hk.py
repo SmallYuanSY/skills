@@ -1,6 +1,7 @@
 """Hong Kong alerts from the HKO open-data warning summary; one request serves every Hong Kong place."""
 from datetime import datetime, timedelta, timezone
 
+from ww_cache import fetch_checked
 from ww_model import Alert, Place
 
 URL = "https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=warnsum&lang=tc"
@@ -39,8 +40,14 @@ def _alerts(data: dict) -> list[Alert]:
     return out
 
 
+def _summary(body) -> dict:
+    if not isinstance(body, dict):
+        raise ValueError("not a warning summary")
+    return body
+
+
 def alerts_for(places: list[Place], http, now: datetime) -> list[list[Alert] | None]:
     if not places:
         return []
-    data = http(URL)
+    data = fetch_checked(http, URL, _summary)
     return [_alerts(data) for _ in places]

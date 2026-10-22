@@ -95,6 +95,9 @@ class Paced:
             self.live = True
         return self.cached(url, headers, text=text)
 
+    def evict(self, url: str, text: bool = False):
+        return self.cached.evict(url, text)
+
 
 def _alerts_as_of(cached: Cached, now: datetime) -> datetime:
     """Alert data older than this run (served from the disk cache) is reported with its own age."""
