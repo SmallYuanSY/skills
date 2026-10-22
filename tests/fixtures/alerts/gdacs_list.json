@@ -1,0 +1,143 @@
+{
+ "type": "FeatureCollection",
+ "features": [
+  {
+   "type": "Feature",
+   "bbox": [
+    124.9,
+    21.2,
+    124.9,
+    21.2
+   ],
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     124.9,
+     21.2
+    ]
+   },
+   "properties": {
+    "eventtype": "TC",
+    "eventid": 1001338,
+    "episodeid": 33,
+    "eventname": "CHAMPI-26",
+    "glide": "",
+    "name": "Tropical Cyclone CHAMPI-26",
+    "description": "Tropical Cyclone CHAMPI-26",
+    "htmldescription": "Red Tropical Cyclone CHAMPI-26 in Philippines, Guam, Northern Mariana Islands, Japan, Taiwan from: 14 Oct 2026  to: 22 Oct 2026 .",
+    "icon": "https://www.gdacs.org/images/gdacs_icons/maps/Green/TC.png",
+    "iconoverall": "https://www.gdacs.org/images/gdacs_icons/maps/Red/TC.png",
+    "url": {
+     "geometry": "https://www.gdacs.org/gdacsapi/api/polygons/getgeometry?eventtype=TC&eventid=1001338&episodeid=33",
+     "report": "https://www.gdacs.org/report.aspx?eventid=1001338&episodeid=33&eventtype=TC",
+     "details": "https://www.gdacs.org/gdacsapi/api/events/geteventdata?eventtype=TC&eventid=1001338"
+    },
+    "alertlevel": "Red",
+    "alertscore": 3,
+    "episodealertlevel": "Green",
+    "episodealertscore": 1.0,
+    "istemporary": "false",
+    "iscurrent": "true",
+    "country": "Philippines, Guam, Northern Mariana Islands, Japan, Taiwan",
+    "fromdate": "2026-10-14T12:00:00",
+    "todate": "2026-10-22T12:00:00",
+    "datemodified": "2026-10-22T13:41:38",
+    "iso3": "GUM",
+    "source": "JTWC",
+    "sourceid": "",
+    "polygonlabel": "Centroid",
+    "Class": "Point_Centroid",
+    "countryonland": "",
+    "affectedcountries": [
+     {
+      "iso2": "PH",
+      "iso3": "PHL",
+      "countryname": "Philippines"
+     },
+     {
+      "iso2": "GU",
+      "iso3": "GUM",
+      "countryname": "Guam"
+     },
+     {
+      "iso2": "JP",
+      "iso3": "JPN",
+      "countryname": "Japan"
+     },
+     {
+      "iso2": "TW",
+      "iso3": "TWN",
+      "countryname": "Taiwan"
+     }
+    ],
+    "severitydata": {
+     "severity": 296.2944,
+     "severitytext": "Hurricane/Typhoon > 74 mph (maximum wind speed of 296 km/h)",
+     "severityunit": "km/h"
+    }
+   }
+  },
+  {
+   "type": "Feature",
+   "bbox": [
+    -110.3,
+    15.2,
+    -110.3,
+    15.2
+   ],
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -110.3,
+     15.2
+    ]
+   },
+   "properties": {
+    "eventtype": "TC",
+    "eventid": 1001339,
+    "episodeid": 5,
+    "eventname": "VANCE-26",
+    "glide": "",
+    "name": "Tropical Cyclone VANCE-26",
+    "description": "Tropical Cyclone VANCE-26",
+    "htmldescription": "Orange Tropical Cyclone VANCE-26 in Mexico from: 18 Oct 2026  to: 22 Oct 2026 .",
+    "icon": "https://www.gdacs.org/images/gdacs_icons/maps/Green/TC.png",
+    "iconoverall": "https://www.gdacs.org/images/gdacs_icons/maps/Red/TC.png",
+    "url": {
+     "geometry": "https://www.gdacs.org/gdacsapi/api/polygons/getgeometry?eventtype=TC&eventid=1001339&episodeid=5",
+     "report": "https://www.gdacs.org/report.aspx?eventid=1001339&episodeid=5&eventtype=TC",
+     "details": "https://www.gdacs.org/gdacsapi/api/events/geteventdata?eventtype=TC&eventid=1001339"
+    },
+    "alertlevel": "Orange",
+    "alertscore": 3,
+    "episodealertlevel": "Green",
+    "episodealertscore": 1.0,
+    "istemporary": "false",
+    "iscurrent": "true",
+    "country": "Mexico",
+    "fromdate": "2026-10-14T12:00:00",
+    "todate": "2026-10-22T09:00:00",
+    "datemodified": "2026-10-22T13:41:38",
+    "iso3": "GUM",
+    "source": "JTWC",
+    "sourceid": "",
+    "polygonlabel": "Centroid",
+    "Class": "Point_Centroid",
+    "countryonland": "",
+    "affectedcountries": [
+     {
+      "iso2": "MX",
+      "iso3": "MEX",
+      "countryname": "Mexico"
+     }
+    ],
+    "severitydata": {
+     "severity": 296.2944,
+     "severitytext": "Hurricane/Typhoon > 74 mph (maximum wind speed of 296 km/h)",
+     "severityunit": "km/h"
+    }
+   }
+  }
+ ],
+ "bbox": null
+}
