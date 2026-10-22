@@ -29,6 +29,8 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/weatherwise.py --days 7        # forecast day
 uv run ${CLAUDE_SKILL_DIR}/scripts/weatherwise.py 礁溪 --detail    # full alert text, and the alerts hidden by "+N more"
 ```
 
+The first run for a new place abroad can take several seconds (address lookups); later runs use the cache.
+
 ## Trips
 
 If the user is going somewhere ("我今天要去礁溪"), pass the destination, and the start too if it helps. Don't add places along the route. Road closures and traffic are not covered: tell them to check their navigation app. More than 5 places gives `error: too_many_places`: keep the most important ones.
@@ -40,15 +42,18 @@ If the user is going somewhere ("我今天要去礁溪"), pass the destination, 
 - `now`, `next_hour`, `daily`: answer with conditions, temperature, and rain chance. `next_hour` says whether rain is expected in the next hour (or `unavailable here`): pass it on when the user is about to go out.
 - Alerts are current only, not a forecast for later days. The block header shows `as of <time>`: for "tomorrow" or "this weekend", say that an alert is active now and may change.
 - `alerts (as of …)` followed by items: always mention every one. Each item is `[severity] title: summary, until <time>`.
+  - Severity, highest first: `[extreme]` (e.g. red light, 超大豪雨, special warning), `[severe]` (orange, 豪雨/大豪雨, warning, typhoon warning), `[moderate]` (yellow, 大雨, advisory), `[minor]`. Lead with the highest.
+  - A typhoon alert's summary is the official forecast position, e.g. `預測23日20時中心在宜蘭的東南東方約 110 公里`: the storm is expected nearest around then. Relay that time and place.
+  - Text after `;` on a typhoon alert line is track data for the same storm (distances, no time): put it in plain words like the cyclone lines below.
   - `[1][2]` tags show which places an item applies to. `超大豪雨 [2] / 大豪雨 [1]` means a different level at each place.
   - `+N more (run again with --detail)`: more alerts exist. Run again with `--detail` if they matter.
-- `alerts: none`: the official source was checked and nothing is active.
+- `alerts: none`: the official source was checked and nothing is active. With several places, status lines carry the place tag: `[2] alerts: none`.
 - `alerts: unsupported`: there is no official source for this place, or its area could not be matched (also a quiet place in a name-only European feed). Never say there are no alerts. If the weather looks severe, or they ask about typhoons or heavy rain, tell them to check the local weather agency.
 - `alerts: unavailable (reason)`: the source failed this time. Never say there are no alerts. Suggest checking the local weather agency, or trying again later.
 - `cyclones (track data, not a local official warning):` is track data only, not an official warning. Tell the user to check the local weather agency. If an official alert for the same storm is listed, use the alert for the warning level and times.
 - `cyclones: unavailable (reason; …)`: typhoon track data could not be read this time. Never say there is no typhoon. If they ask about typhoons, tell them to check the local weather agency.
-- Cyclone lines give the current distance and direction and the forecast closest distance, but no closest-approach time. Only give a time if an official alert's text gives one.
-- Turn compass letters and km into plain words. Don't read out "SE 470 km". Say "颱風在台灣東南方海面，明天傍晚最接近，大約在宜蘭外海 120 公里" (the time part only when known). People don't know which way "southeast" points.
+- Cyclone lines give the current distance and direction and the forecast closest distance, but no closest-approach time. Only give a time if an official alert gives one (the typhoon alert's `預測…` summary).
+- Turn compass letters and km into plain words, on cyclone lines and on the track text of a typhoon alert line. Don't read out "SE 470 km". Say "颱風在台灣東南方的海上，之後最接近時大約在宜蘭外海 120 公里". When the alert gives a time: "颱風在台灣東南方的海上，明天晚上 8 點左右最接近，大約在宜蘭外海 110 公里". People don't know which way "southeast" points.
 - `notice:` always pass it on to the user.
 - `[1] error: ...` with `action:` (or a top-level `error:`): do what the `action:` line says. One failed place doesn't stop the others.
 - Don't mention data sources in the answer.
@@ -67,7 +72,7 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/weatherwise.py config weatherkit --remove
 ```
 
 - After `set-default`, tell the user the place that was saved and ask them to confirm it.
-- `lang` only sets the language of place names and alert text (a BCP 47 tag such as `zh-TW`, `en`, `ja`). It does not change the language you answer in.
+- `lang` (a BCP 47 tag such as `zh-TW`, `en`, `ja`) only changes the language of place names. Alert text always comes in the issuing agency's own language, and places abroad are labelled in their local language. It does not change the language you answer in.
 - WeatherKit is optional: it improves the forecast and next-hour rain in some countries. Alerts never depend on it. It needs a paid Apple Developer membership. If the user wants it, walk them through `${CLAUDE_SKILL_DIR}/references/weatherkit-setup.md` one step at a time. Only the user can do the steps on Apple's website. The Key ID is read from the key's file name.
 - `config show` shortens IDs on purpose. Never fill in, guess, or retype an ID: take it from the user, or leave it out so the saved one is kept.
 - If the user would rather not paste their IDs into the chat, give them the full command to run in their own terminal (in Claude Code, they can type it after `!`).
