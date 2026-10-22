@@ -152,3 +152,10 @@ def test_cyclone_with_an_empty_local_name_never_merges(monkeypatch):
     monkeypatch.setattr(ww_cyclones, "nearby", lambda p, h, n: [(nameless, [0])])
     res, cyclones = ww_alerts.collect([BANQIAO], None, NOW)
     assert cyclones == [(nameless, [0])] and res[0].alerts[0].cyclone is None
+
+
+def test_collect_dedupes_two_versions_of_one_key(monkeypatch):
+    versions = [alert("ncdr:強風", updated=1, title="old"), alert("ncdr:強風", updated=9, title="new")]
+    monkeypatch.setitem(ww_alerts.PROVIDERS, "tw", lambda p, h, n: [versions])
+    res, _ = ww_alerts.collect([BANQIAO], None, NOW)
+    assert [a.title for a in res[0].alerts] == ["new"]

@@ -14,6 +14,7 @@ TPE = ZoneInfo("Asia/Taipei")
 NCDR_NOW = datetime(2026, 10, 22, 20, 30, tzinfo=TPE)
 BANQIAO = Place("板橋區", 25.011, 121.459, "Asia/Taipei", "tw", "新北市", "板橋區")
 JIAOXI = Place("礁溪鄉", 24.827, 121.775, "Asia/Taipei", "tw", "宜蘭縣", "礁溪鄉")
+TAIPEI = Place("士林區", 25.09, 121.52, "Asia/Taipei", "tw", "臺北市", "士林區")
 NANTOU = Place("x", 23.9, 120.69, "Asia/Taipei", "tw", "南投縣", "x")  # not in the rain list
 NO_REGION = Place("板橋", 25.01, 121.46, "Asia/Taipei", "tw")
 
@@ -54,13 +55,25 @@ def test_ncdr_typhoon_covers_every_place():
         assert "typhoon" in kinds(alerts)
 
 
-def test_ncdr_severity_and_display_title():
-    (alerts,) = run([JIAOXI])
-    by = {a.kind: a for a in alerts}
-    assert by["rain"].severity == "extreme" and by["rain"].title == "超大豪雨"
-    assert by["wind"].severity == "severe" and by["wind"].title == "強風 橙色燈號"
-    assert by["typhoon"].title == "颱風警報 中度颱風 薔琵"
-    assert by["typhoon"].severity == "extreme"  # its text carries a 超大豪雨 warning
+def by_kind(place):
+    (alerts,) = run([place])
+    return {a.kind: a for a in alerts}
+
+
+def test_ncdr_rain_severity_and_title_follow_the_place():
+    assert (by_kind(JIAOXI)["rain"].severity, by_kind(JIAOXI)["rain"].title) == ("extreme", "超大豪雨")
+    assert (by_kind(BANQIAO)["rain"].severity, by_kind(BANQIAO)["rain"].title) == ("severe", "大豪雨")
+
+
+def test_ncdr_wind_light_follows_the_place():
+    assert (by_kind(TAIPEI)["wind"].severity, by_kind(TAIPEI)["wind"].title) == ("moderate", "強風 黃色燈號")
+    assert (by_kind(BANQIAO)["wind"].severity, by_kind(BANQIAO)["wind"].title) == ("severe", "強風 橙色燈號")
+
+
+def test_ncdr_typhoon_is_severe_with_name():
+    for place in (BANQIAO, JIAOXI, NANTOU):
+        ty = by_kind(place)["typhoon"]
+        assert ty.severity == "severe" and ty.title == "颱風警報 中度颱風 薔琵"
 
 
 def test_ncdr_fields_come_from_the_newest_entry():
@@ -104,11 +117,18 @@ def test_ncdr_taiwan_character_variants_match():
     assert "rain" in kinds(got[0])
 
 
-def test_ncdr_through_collect_dedupes_versions_and_drops_expired(monkeypatch):
+def test_ncdr_through_collect_drops_expired(monkeypatch):
     monkeypatch.setattr(ww_cyclones, "nearby", lambda p, h, n: [])
     monkeypatch.setitem(ww_alerts.PROVIDERS, "tw", ww_alerts_tw.alerts_for)
     res, _ = ww_alerts.collect([BANQIAO, NANTOU], http(), NCDR_NOW)
     for r in res:
         assert r.status == "ok"
-        assert [a.kind for a in r.alerts].count("wind") == 1
-        assert "heat" not in [a.kind for a in r.alerts]  # the only heat entry expired yesterday
+        kinds_ = [a.kind for a in r.alerts]
+        assert kinds_.count("wind") == 1 and "heat" not in kinds_  # the only heat entry expired yesterday
+
+
+def test_ncdr_unparseable_response_is_unavailable_through_collect(monkeypatch):
+    monkeypatch.setattr(ww_cyclones, "nearby", lambda p, h, n: [])
+    monkeypatch.setitem(ww_alerts.PROVIDERS, "tw", ww_alerts_tw.alerts_for)
+    res, _ = ww_alerts.collect([BANQIAO], FakeHttp({ww_alerts_tw.FEED: "<feed><entry>"}), NCDR_NOW)
+    assert res[0].status == "unavailable" and "ParseError" in res[0].reason

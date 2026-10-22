@@ -38,7 +38,9 @@ def _norm(s: str) -> str:
 
 
 def _severity(kind: str, text: str) -> str:
-    found = {"severe"} if kind == "typhoon" else set()
+    if kind == "typhoon":
+        return "severe"  # words elsewhere in the long text must not escalate it
+    found = set()
     for level, words in SEVERITY_WORDS:
         if any(w in text for w in words):
             found.add(level)
@@ -58,6 +60,16 @@ def _title(kind: str, title: str, text: str) -> str:
         m = re.search(r"(輕度|中度|強烈)颱風 ([^\s（]+)（國際命名", text)
         return f"颱風警報 {m.group(1)}颱風 {m.group(2)}" if m else "颱風警報"
     return title
+
+
+def _scope(text: str, region: str | None) -> str:
+    """The clauses that name the place's county; the whole text when none does."""
+    if region:
+        norm = _norm(region)
+        clauses = [c for c in re.split(r"[，。；;\n]", text) if norm in _norm(c)]
+        if clauses:
+            return "，".join(clauses)
+    return text
 
 
 def _segments(text: str) -> list[str]:
@@ -106,7 +118,8 @@ def _entries(root: ET.Element) -> list[dict]:
 def _alert(item: dict, region: str | None) -> Alert:
     kind = KINDS[item["title"]]
     text = item["text"]
-    return Alert(kind, _severity(kind, text), _title(kind, item["title"], text), _summary(kind, text, region), text,
+    scoped = _scope(text, region)
+    return Alert(kind, _severity(kind, scoped), _title(kind, item["title"], scoped), _summary(kind, text, region), text,
                  item["expires"], item["updated"], "ncdr", "ncdr:" + item["title"])
 
 

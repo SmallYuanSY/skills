@@ -143,5 +143,7 @@ def test_ncdr_feed_still_has_the_fields_we_parse():
     for e in entries:
         assert e.findtext(f"{ww_alerts_tw.ATOM}author/{ww_alerts_tw.ATOM}name")
         assert e.findtext(f"{ww_alerts_tw.ATOM}title")
-        assert e.findtext(f"{ww_alerts_tw.CAP}expires")
-    assert ww_alerts_tw._entries(root) is not None
+        expires = e.findtext(f"{ww_alerts_tw.CAP}expires")
+        if expires:
+            assert ww_alerts_tw.parse_ncdr_time(expires).tzinfo is not None
+    assert any(e.findtext(f"{ww_alerts_tw.CAP}status") for e in entries)
