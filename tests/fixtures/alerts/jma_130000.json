@@ -1,0 +1,74 @@
+{
+ "reportDatetime": "2026-05-28T10:16:00+09:00",
+ "publishingOffice": "気象庁",
+ "headlineText": "伊豆諸島南部では、強風や高波に注意してください。伊豆諸島北部、伊豆諸島南部では、急な強い雨や落雷、濃霧による視程障害に注意してください。",
+ "_note": "Trimmed to 4 municipalities. Fetched live 2026-10-22; Chiyoda had no warnings that day, so its entry is HAND-EDITED to cover each status: 03 大雨警報 発表 (active warning), 15 強風注意報 継続 (active advisory), 16 波浪注意報 解除 (cleared), 20 濃霧注意報 発表警報・注意報はなし (none). 中央区, 大島町 and 八丈町 are as published.",
+ "areaTypes": [
+  {
+   "areas": [
+    {
+     "code": "1310100",
+     "warnings": [
+      {
+       "code": "03",
+       "status": "発表"
+      },
+      {
+       "code": "15",
+       "status": "継続"
+      },
+      {
+       "code": "16",
+       "status": "解除"
+      },
+      {
+       "status": "発表警報・注意報はなし"
+      }
+     ]
+    },
+    {
+     "code": "1310200",
+     "warnings": [
+      {
+       "status": "発表警報・注意報はなし"
+      }
+     ]
+    },
+    {
+     "code": "1336100",
+     "warnings": [
+      {
+       "code": "14",
+       "status": "継続"
+      },
+      {
+       "code": "20",
+       "status": "継続"
+      }
+     ]
+    },
+    {
+     "code": "1340100",
+     "warnings": [
+      {
+       "code": "14",
+       "status": "継続"
+      },
+      {
+       "code": "15",
+       "status": "継続"
+      },
+      {
+       "code": "16",
+       "status": "継続"
+      },
+      {
+       "code": "20",
+       "status": "継続"
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

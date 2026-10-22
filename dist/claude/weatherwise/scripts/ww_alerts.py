@@ -4,6 +4,7 @@ from collections import defaultdict
 from datetime import datetime
 from typing import Callable
 
+import ww_alerts_jp
 import ww_alerts_tw
 import ww_cyclones
 from ww_errors import WwError
@@ -13,7 +14,7 @@ from ww_model import SEVERITY_ORDER, Alert, Cyclone, Place, PlaceAlerts
 CAP = 6  # alerts listed per place
 
 # country code -> alerts_for(places, http, now) -> list[list[Alert] | None]
-PROVIDERS: dict[str, Callable] = {"tw": ww_alerts_tw.alerts_for}
+PROVIDERS: dict[str, Callable] = {"tw": ww_alerts_tw.alerts_for, "jp": ww_alerts_jp.alerts_for}
 
 
 def _reason(cc: str, e: Exception) -> str:

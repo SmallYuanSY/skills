@@ -1,0 +1,117 @@
+{
+ "centers": {},
+ "offices": {
+  "130000": {
+   "name": "東京都",
+   "enName": "Tokyo",
+   "officeName": "気象庁",
+   "parent": "010300",
+   "children": [
+    "130010",
+    "130020",
+    "130030",
+    "130040"
+   ]
+  }
+ },
+ "class10s": {
+  "130010": {
+   "name": "東京地方",
+   "enName": "Tokyo Region",
+   "parent": "130000",
+   "children": [
+    "130011",
+    "130012",
+    "130013",
+    "130014",
+    "130015"
+   ]
+  },
+  "130020": {
+   "name": "伊豆諸島北部",
+   "enName": "Northern Izu Islands",
+   "parent": "130000",
+   "children": [
+    "130021",
+    "130022"
+   ]
+  },
+  "130030": {
+   "name": "伊豆諸島南部",
+   "enName": "Southern Izu Islands",
+   "parent": "130000",
+   "children": [
+    "130031",
+    "130032"
+   ]
+  }
+ },
+ "class15s": {
+  "130011": {
+   "name": "２３区西部",
+   "enName": "Western Region of 23 wards",
+   "parent": "130010",
+   "children": [
+    "1310100",
+    "1310200",
+    "1310300",
+    "1310400",
+    "1310500",
+    "1310900",
+    "1311000",
+    "1311100",
+    "1311200",
+    "1311300",
+    "1311400",
+    "1311500",
+    "1311600",
+    "1311700",
+    "1311900",
+    "1312000"
+   ]
+  },
+  "130021": {
+   "name": "大島",
+   "enName": "Oshima Island",
+   "parent": "130020",
+   "children": [
+    "1336100"
+   ]
+  },
+  "130031": {
+   "name": "八丈島",
+   "enName": "Hachijojima Island",
+   "parent": "130030",
+   "children": [
+    "1340100",
+    "1340200"
+   ]
+  }
+ },
+ "class20s": {
+  "1310100": {
+   "name": "千代田区",
+   "enName": "Chiyoda City",
+   "kana": "ちよだく",
+   "parent": "130011"
+  },
+  "1310200": {
+   "name": "中央区",
+   "enName": "Chuo City",
+   "kana": "ちゅうおうく",
+   "parent": "130011"
+  },
+  "1336100": {
+   "name": "大島町",
+   "enName": "Oshima Town",
+   "kana": "おおしままち",
+   "parent": "130021"
+  },
+  "1340100": {
+   "name": "八丈町",
+   "enName": "Hachijo Town",
+   "kana": "はちじょうまち",
+   "parent": "130031"
+  }
+ }
+}

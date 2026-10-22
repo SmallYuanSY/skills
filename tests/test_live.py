@@ -166,3 +166,23 @@ def test_gdacs_list_and_geometry_shape():
     classes = {g["properties"].get("Class") for g in geo["features"]}
     assert "Point_Centroid" in classes and "Poly_Green" in classes
     assert any(g["geometry"]["type"] == "LineString" and "forecast" in g["properties"] for g in geo["features"])
+
+
+def test_jma_area_and_tokyo_warning_shape(polite):
+    import ww_alerts_jp
+
+    area = get(ww_alerts_jp.AREA_URL)
+    assert area["class20s"]["1310100"]["name"] == "千代田区"
+    assert ww_alerts_jp._office_of(area, "1310100") == "130000"
+    time.sleep(1)
+    report = get(ww_alerts_jp.WARNING_URL.format("130000"))
+    assert datetime.fromisoformat(report["reportDatetime"]).tzinfo and "headlineText" in report
+    areas = [a for t in report["areaTypes"] for a in t["areas"]]
+    assert any(a["code"] == "1310100" for a in areas)
+    for a in areas:
+        for w in a["warnings"]:
+            assert w["status"]
+            if w["status"] not in ww_alerts_jp.INACTIVE:
+                assert w["code"]
+    p = Place("千代田区", 35.694, 139.754, "Asia/Tokyo", "jp", "東京", "千代田区")
+    assert ww_alerts_jp.alerts_for([p], get, datetime.now().astimezone())[0] is not None
