@@ -172,7 +172,7 @@ weatherwise [地點 ...] [--global] [--days N] [--lang TAG] [--json]
 - **同一個來源，一次執行只抓一次**：NCDR、MeteoAlarm（每國）、HKO、GDACS 列表都是整國或全球一份，抓一次後在本機篩選。JMA 依都道府縣，每縣只抓一次。ECCC 用涵蓋所有地點的 bbox 一次查完。NWS 依座標查，每個地點一次。
 - **預報**：Open-Meteo 用一次請求帶入多組座標（API 支援以逗號分隔的經緯度）。WeatherKit 每個地點一次。
 - **GDACS geometry**：只對 2000 km 內的事件才抓。
-- **本機快取**：`~/.cache/weatherwise/`（遵循 `XDG_CACHE_HOME`），依 URL 存放。TTL：警報 5 分鐘、GDACS 15 分鐘、預報 15 分鐘、Nominatim 查詢結果 30 天。快取壞掉或無法寫入時，直接忽略，不可以因此報錯。*（TTL 數值是設計者的判斷）*
+- **本機快取**：`~/.cache/weatherwise/`（遵循 `XDG_CACHE_HOME`），依 URL 存放。TTL：警報 5 分鐘（MeteoAlarm 整國 feed 大而慢，15 分鐘）、GDACS 15 分鐘、預報 15 分鐘、Nominatim 查詢結果 30 天。快取壞掉或無法寫入時，直接忽略，不可以因此報錯。來源拒絕的回應（例如 NCDR 限流訊息、無法解析的內容）不寫入快取；若有一小時內的上一份正常資料就改用它，「as of」顯示它的時間。*（TTL 數值是設計者的判斷）*
 - NCDR 的 3 秒限制：同一次執行只會請求一次。被擋時（收到那段 `<Warning>` XML），視為暫時失敗，不重試，該地點的警報輸出 `unavailable`（見下）。
 - 所有請求都帶現有的 `User-Agent`（NWS、Nominatim 都要求）。
 

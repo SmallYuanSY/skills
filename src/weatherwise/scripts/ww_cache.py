@@ -9,18 +9,20 @@ DAY = 86400
 ALERT_TTL = 300
 LAST_GOOD_MAX = 3600  # how old a cached copy may be to stand in for a rejected refetch
 GDACS = "https://www.gdacs.org"
+METEOALARM = "https://feeds.meteoalarm.org"
 ALERT_FEEDS = (
     "https://alerts.ncdr.nat.gov.tw",
     "https://www.jma.go.jp/bosai/warning",
     "https://data.weather.gov.hk",
     "https://api.weather.gov",
     "https://api.weather.gc.ca",
-    "https://feeds.meteoalarm.org",
+    METEOALARM,
 )
 ALERT_SOURCES = ALERT_FEEDS + (GDACS,)  # whose age the output reports as "as of"
 OPEN_METEO = "https://api.open-meteo.com"
 # First matching prefix wins; anything unlisted is only de-duplicated within a run.
 TTLS = (
+    (METEOALARM, 900),  # a whole country per feed, large and slow; still reported "as of" like any alert feed
     *((p, ALERT_TTL) for p in ALERT_FEEDS),
     (GDACS, 900),
     (OPEN_METEO, 900),

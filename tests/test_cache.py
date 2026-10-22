@@ -1,7 +1,7 @@
 import pytest
 
 from conftest import FakeHttp
-from ww_cache import Cached, cache_dir, ttl_for
+from ww_cache import ALERT_SOURCES, Cached, cache_dir, ttl_for
 from ww_errors import WwError
 from ww_http import HttpError
 
@@ -81,7 +81,7 @@ def test_text_and_json_responses_do_not_mix_on_disk(tmp_path):
     ("https://www.jma.go.jp/bosai/warning/data/warning/130000.json", 300),
     ("https://data.weather.gov.hk/weatherAPI/opendata/weather.php", 300),
     ("https://api.weather.gc.ca/collections/x", 300),
-    ("https://feeds.meteoalarm.org/feeds/x", 300),
+    ("https://feeds.meteoalarm.org/feeds/x", 900),  # large, slow feeds
     ("https://www.gdacs.org/gdacsapi/api/events/geteventlist/MAP", 900),
     ("https://api.open-meteo.com/v1/forecast?x=1", 900),
     ("https://weatherkit.apple.com/api/v1/weather/en/1/2", 900),
@@ -156,3 +156,7 @@ def test_last_good_copy_older_than_an_hour_is_not_used(tmp_path):
     c = Cached(FakeHttp({ALERTS: RATE_LIMITED}), 1000 + 3601, tmp_path)
     c(ALERTS, text=True)
     assert c.evict(ALERTS, text=True) is None
+
+
+def test_meteoalarm_still_counts_for_alerts_as_of():
+    assert "https://feeds.meteoalarm.org/api/v1/warnings/feeds-germany".startswith(ALERT_SOURCES)
