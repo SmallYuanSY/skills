@@ -68,7 +68,7 @@ def set_lang(lang: str, cfg: dict, d: Path) -> str:
     return f"saved: lang = {cfg['lang']}"
 
 
-def set_weatherkit(team_id, service_id, key_file, key_id, country_code, cfg, d, lang, http, now_ts) -> str:
+def set_weatherkit(team_id, service_id, key_file, key_id, cfg, d, lang, http, now_ts) -> str:
     src = Path(key_file).expanduser()
     if not src.is_file():
         raise WwError("invalid_key_file", str(src))
@@ -84,7 +84,7 @@ def set_weatherkit(team_id, service_id, key_file, key_id, country_code, cfg, d, 
         raise WwError("weatherkit_config_incomplete", ", ".join(missing) + hint)
 
     wk = {"team_id": team_id, "key_id": key_id, "service_id": service_id,
-          "key_path": str(src), "country_code": country_code}
+          "key_path": str(src)}
     df = cfg.get("default")
     place = Place(df["name"], df["lat"], df["lon"], df.get("timezone")) if df else TEST_PLACE
     place = with_timezone(place, http)

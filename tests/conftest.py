@@ -44,10 +44,36 @@ WEATHERKIT = {
     "weatherAlerts": {"alerts": []},
 }
 
-# WeatherKit's availability endpoint: which data sets Apple has for a place.
-# Real responses (2026-10-07): Taiwan and Japan have no weatherAlerts; the US does.
-WK_AVAILABLE_NO_ALERTS = ["currentWeather", "forecastDaily", "forecastHourly"]
-WK_AVAILABLE_WITH_ALERTS = ["currentWeather", "forecastDaily", "forecastHourly", "weatherAlerts"]
+# forecastNextHour as WeatherKit returns it: summary segments (startTime/endTime, condition,
+# precipitationIntensity in mm/h) plus per-minute data. Query time is 20:41 in Tokyo (11:41Z).
+def _next_hour(summary, peak=None):
+    return {"forecastNextHour": {
+        "forecastStart": "2026-10-07T11:41:00Z", "forecastEnd": "2026-10-07T12:41:00Z",
+        "summary": summary,
+        "minutes": [{"startTime": "2026-10-07T11:41:00Z", "precipitationIntensity": peak or 0.0}],
+    }}
+
+
+NEXT_HOUR_RAIN_AT_2105 = _next_hour([  # 2026-10-07T12:05Z = 21:05 Tokyo
+    {"startTime": "2026-10-07T11:41:00Z", "endTime": "2026-10-07T12:05:00Z", "condition": "clear",
+     "precipitationChance": 0.0, "precipitationIntensity": 0.0},
+    {"startTime": "2026-10-07T12:05:00Z", "condition": "rain",
+     "precipitationChance": 0.8, "precipitationIntensity": 1.2},
+])
+NEXT_HOUR_CLEAR = _next_hour([
+    {"startTime": "2026-10-07T11:41:00Z", "condition": "clear", "precipitationChance": 0.0,
+     "precipitationIntensity": 0.0},
+])
+NEXT_HOUR_HEAVY_NOW_STOPPING_2140 = _next_hour([  # 12:40Z = 21:40 Tokyo
+    {"startTime": "2026-10-07T11:41:00Z", "endTime": "2026-10-07T12:40:00Z", "condition": "rain",
+     "precipitationChance": 1.0, "precipitationIntensity": 6.5},
+    {"startTime": "2026-10-07T12:40:00Z", "condition": "clear", "precipitationChance": 0.0,
+     "precipitationIntensity": 0.0},
+], peak=6.5)
+NEXT_HOUR_RAIN_WHOLE_HOUR = _next_hour([
+    {"startTime": "2026-10-07T11:41:00Z", "condition": "rain", "precipitationChance": 0.9,
+     "precipitationIntensity": 1.0},
+])
 
 
 class FakeHttp:

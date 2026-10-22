@@ -93,7 +93,6 @@ def run_config(argv: list[str], http, now: datetime | None) -> str:
     wk.add_argument("--service-id")
     wk.add_argument("--key-file")
     wk.add_argument("--key-id")
-    wk.add_argument("--country-code", default="TW")
     wk.add_argument("--remove", action="store_true")
     a = p.parse_args(argv)
 
@@ -110,7 +109,7 @@ def run_config(argv: list[str], http, now: datetime | None) -> str:
     if not a.key_file:
         raise WwError("invalid_key_file", "--key-file is required")
     now_ts = int((now or datetime.now(timezone.utc)).timestamp())
-    return set_weatherkit(a.team_id, a.service_id, a.key_file, a.key_id, a.country_code,
+    return set_weatherkit(a.team_id, a.service_id, a.key_file, a.key_id,
                           cfg, d, resolve_lang(None, cfg), http, now_ts)
 
 

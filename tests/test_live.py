@@ -103,9 +103,6 @@ def test_weatherkit_returns_every_field_the_fixture_uses():
 
 
 @needs_weatherkit
-
-
-@needs_weatherkit
 def test_weatherkit_setup_end_to_end(config_dir, capsys):
     wk = local_weatherkit()
     assert weatherwise.main(["config", "set-default", "25.033,121.565"]) == 0
@@ -120,3 +117,11 @@ def test_weatherkit_setup_end_to_end(config_dir, capsys):
     assert weatherwise.main([]) == 0
     assert capsys.readouterr().out.startswith("source: weatherkit")
     assert weatherwise.main(["config", "weatherkit", "--remove"]) == 0
+
+
+@needs_weatherkit
+def test_weatherkit_next_hour_in_tokyo():
+    tokyo = Place("東京", 35.681, 139.767, "Asia/Tokyo", "jp")
+    r = fetch_weatherkit(tokyo, 1, "en", local_weatherkit(), get, int(time.time()))
+    assert "forecastNextHour" in r.raw
+    assert r.next_hour and r.next_hour != "unavailable here"

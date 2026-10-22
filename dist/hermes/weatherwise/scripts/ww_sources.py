@@ -10,22 +10,29 @@ from ww_model import Current, Day, Place, Report, weatherkit_condition, wmo_cond
 
 OPEN_METEO = "https://api.open-meteo.com/v1/forecast"
 WEATHERKIT = "https://weatherkit.apple.com/api/v1/weather"
-# Which data sets Apple has for a place. Alerts only exist in some countries
-# (not Taiwan or Japan as of 2026-10), so ask before treating "no alerts" as "none".
-WEATHERKIT_AVAILABILITY = "https://weatherkit.apple.com/api/v1/availability"
+HEAVY_RAIN_MM_H = 4.0
 
 
 def fetch_open_meteo(place: Place, days: int, http) -> Report:
+    return fetch_open_meteo_many([place], days, http)[0]
+
+
+def fetch_open_meteo_many(places: list[Place], days: int, http) -> list[Report]:
+    """One request for all places: Open-Meteo takes comma-joined coordinates."""
     q = urllib.parse.urlencode({
-        "latitude": place.lat, "longitude": place.lon,
+        "latitude": ",".join(str(p.lat) for p in places), "longitude": ",".join(str(p.lon) for p in places),
         "current": "temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,weather_code,uv_index",
         "daily": "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max",
-        "timezone": place.timezone, "forecast_days": days,
+        "timezone": ",".join(p.timezone for p in places), "forecast_days": days,
     })
     try:
-        return parse_open_meteo(http(f"{OPEN_METEO}?{q}"))
+        data = http(f"{OPEN_METEO}?{q}")
     except HttpError as e:
         raise WwError("service_error", f"open-meteo HTTP {e.status}") from None
+    items = data if isinstance(data, list) else [data]  # one place gets a dict, several get a list
+    if len(items) != len(places):
+        raise WwError("service_error", "unexpected open-meteo response")
+    return [parse_open_meteo(item) for item in items]
 
 
 def parse_open_meteo(data: dict) -> Report:
@@ -69,27 +76,48 @@ def make_token(wk: dict, now_ts: int) -> str:
 
 def fetch_weatherkit(place: Place, days: int, lang: str, wk: dict, http, now_ts: int) -> Report:
     headers = {"Authorization": f"Bearer {make_token(wk, now_ts)}"}
-    country = wk.get("country_code", "TW")
-    available = http(
-        f"{WEATHERKIT_AVAILABILITY}/{place.lat}/{place.lon}?{urllib.parse.urlencode({'country': country})}", headers
-    )
-    alerts_available = "weatherAlerts" in available
-    data_sets = ["currentWeather", "forecastDaily"] + (["weatherAlerts"] if alerts_available else [])
-    q = urllib.parse.urlencode({
-        "dataSets": ",".join(data_sets), "timezone": place.timezone, "countryCode": country,
-    })
-    data = http(f"{WEATHERKIT}/{lang}/{place.lat}/{place.lon}?{q}", headers)
-    return parse_weatherkit(data, place.timezone, days, alerts_available)
+    params = {"dataSets": "currentWeather,forecastDaily,forecastNextHour", "timezone": place.timezone}
+    if place.country_code:
+        params["countryCode"] = place.country_code.upper()
+    data = http(f"{WEATHERKIT}/{lang}/{place.lat}/{place.lon}?{urllib.parse.urlencode(params)}", headers)
+    return parse_weatherkit(data, place.timezone, days)
 
 
-def parse_weatherkit(data: dict, tz: str, days: int, alerts_available: bool) -> Report:
+def _local_time(iso: str, zone: ZoneInfo) -> str:
+    return datetime.fromisoformat(iso.replace("Z", "+00:00")).astimezone(zone).strftime("%H:%M")
+
+
+def summarize_next_hour(data: dict, tz: str) -> str:
+    """One line from forecastNextHour: segments say when rain starts or stops, intensity is mm/h."""
+    nh = data["forecastNextHour"]
+    zone = ZoneInfo(tz)
+    segs = nh.get("summary") or []
+    rainy = [s for s in segs if s["condition"] != "clear"]
+    if not rainy:
+        return "no rain expected in the next hour"
+    peak = max([s.get("precipitationIntensity") or 0 for s in rainy]
+               + [m.get("precipitationIntensity") or 0 for m in nh.get("minutes") or []])
+    first = rainy[0]
+    if segs[0] is not first:
+        text = f"rain starting ~{_local_time(first['startTime'], zone)}"
+    else:
+        later = segs[1:2]
+        stop = first.get("endTime") or (later[0]["startTime"] if later else None)
+        if stop is None or (nh.get("forecastEnd") and stop >= nh["forecastEnd"]):
+            text = "rain for the whole hour"
+        else:
+            text = f"rain now, stopping ~{_local_time(stop, zone)}"
+    return text + (", heavy" if peak >= HEAVY_RAIN_MM_H else "")
+
+
+def parse_weatherkit(data: dict, tz: str, days: int) -> Report:
     try:
-        return _parse_weatherkit(data, tz, days, alerts_available)
+        return _parse_weatherkit(data, tz, days)
     except (KeyError, TypeError, ValueError, AttributeError):
         raise WwError("service_error", "unexpected weatherkit response") from None
 
 
-def _parse_weatherkit(data: dict, tz: str, days: int, alerts_available: bool) -> Report:
+def _parse_weatherkit(data: dict, tz: str, days: int) -> Report:
     c = data.get("currentWeather")
     current = Current(
         weatherkit_condition(c["conditionCode"]), c["temperature"], c["temperatureApparent"],
@@ -104,4 +132,5 @@ def _parse_weatherkit(data: dict, tz: str, days: int, alerts_available: bool) ->
             start.date().isoformat(), weatherkit_condition(d["conditionCode"]),
             d["temperatureMin"], d["temperatureMax"], None if chance is None else chance * 100,
         ))
-    return Report("weatherkit", current, out, data)
+    next_hour = summarize_next_hour(data, tz) if data.get("forecastNextHour") else "unavailable here"
+    return Report("weatherkit", current, out, data, next_hour)

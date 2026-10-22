@@ -84,7 +84,7 @@ def test_null_temperatures_render_as_unknown():
 def test_weatherkit_schema_change_is_a_service_error():
     data = {**WEATHERKIT, "currentWeather": {"temperature": 20}}  # conditionCode missing
     with pytest.raises(WwError) as e:
-        parse_weatherkit(data, "Asia/Taipei", 3, alerts_available=False)
+        parse_weatherkit(data, "Asia/Taipei", 3)
     assert e.value.code == "service_error"
 
 
