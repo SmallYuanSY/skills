@@ -11,7 +11,7 @@ import weatherwise
 from conftest import OPEN_METEO, WEATHERKIT
 from ww_http import get
 from ww_model import Place
-from ww_places import geocode, with_timezone
+from ww_places import geocode, reverse, with_timezone
 from ww_sources import fetch_open_meteo, fetch_weatherkit
 
 pytestmark = pytest.mark.live
@@ -58,6 +58,24 @@ def test_open_meteo_returns_every_field_the_fixture_uses():
 def test_geocode_in_taiwan(polite):
     place = geocode("板橋", "zh-TW", False, polite)
     assert 24.9 < place.lat < 25.1 and 121.4 < place.lon < 121.55
+
+
+@pytest.mark.parametrize("q,region,locality", [
+    ("坪林", "新北市", "坪林區"), ("礁溪", "宜蘭縣", "礁溪鄉"), ("板橋", "新北市", "板橋區")])
+def test_geocode_prefers_the_district_over_a_same_named_village(q, region, locality, polite):
+    p = geocode(q, "zh-TW", False, get)
+    assert (p.country_code, p.region, p.locality) == ("tw", region, locality)
+
+
+def test_geocode_tokyo_has_japanese_municipality(polite):
+    p = geocode("東京都千代田区", "ja", True, get)
+    assert p.country_code == "jp"
+    assert "東京" in p.region
+
+
+def test_reverse_fills_country_for_coordinates(polite):
+    p = reverse(40.71, -74.0, "en", get)
+    assert p.country_code == "us"
 
 
 def test_geocode_abroad_with_timezone(polite):

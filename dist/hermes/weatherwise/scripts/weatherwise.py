@@ -24,7 +24,7 @@ from ww_http import REPO, VERSION, HttpError, get  # noqa: E402
 from ww_places import resolve_place, with_timezone  # noqa: E402
 from ww_render import render_error, render_report  # noqa: E402
 from ww_sources import fetch_open_meteo, fetch_weatherkit  # noqa: E402
-from ww_setup import remove_weatherkit, set_default, set_lang, set_weatherkit, show  # noqa: E402
+from ww_setup import ensure_default_complete, remove_weatherkit, set_default, set_lang, set_weatherkit, show  # noqa: E402
 
 VERSION_LINE = f"weatherwise {VERSION} · by SmallYuan · {REPO}"
 AUTH_FALLBACK = (
@@ -55,6 +55,8 @@ def run_weather(argv: list[str], http, now: datetime | None) -> str:
     cfg = load_config(config_dir())
     lang = resolve_lang(a.lang, cfg)
     wk = weatherkit_settings(cfg)  # config mistakes stop here, before any request
+    if not a.place:
+        ensure_default_complete(cfg, config_dir(), lang, http)
     place = with_timezone(resolve_place(a.place, cfg, lang, a.global_search, http), http)
     days = min(max(a.days, 1), 10)
     local_now = (now or datetime.now(timezone.utc)).astimezone(ZoneInfo(place.timezone))

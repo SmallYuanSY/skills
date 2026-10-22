@@ -10,7 +10,8 @@ NOMINATIM = "https://nominatim.openstreetmap.org/"
 OM = "https://api.open-meteo.com/"
 WK = "https://weatherkit.apple.com/"
 WK_AVAIL = "https://weatherkit.apple.com/api/v1/availability"
-TAICHUNG = [{"display_name": "臺中市, 臺灣", "lat": "24.1477", "lon": "120.6736"}]
+TAICHUNG = [{"display_name": "臺中市, 臺灣", "lat": "24.1477", "lon": "120.6736",
+             "address": {"city": "臺中市", "country": "臺灣", "country_code": "tw"}}]
 
 
 def run(argv, http, capsys):
@@ -37,7 +38,8 @@ def test_set_default_saves_and_asks_to_confirm(config_dir, capsys):
     assert out.splitlines()[0] == "saved: default = 臺中市, 臺灣 (24.148, 120.674) timezone=Asia/Taipei"
     assert out.splitlines()[1].startswith("action: confirm with the user")
     assert load_config(config_dir)["default"] == {
-        "name": "臺中市, 臺灣", "lat": 24.1477, "lon": 120.6736, "timezone": "Asia/Taipei"}
+        "name": "臺中市, 臺灣", "lat": 24.1477, "lon": 120.6736, "timezone": "Asia/Taipei",
+        "country_code": "tw", "region": "臺中市", "locality": None}
 
 
 def test_set_default_unknown_place_writes_nothing(config_dir, capsys):

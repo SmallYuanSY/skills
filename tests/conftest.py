@@ -12,7 +12,8 @@ from cryptography.hazmat.primitives.asymmetric import ec
 # 2026-10-07 12:41 UTC = 2026-10-07 20:41 Wed in Taipei
 NOW = datetime(2026, 10, 7, 12, 41, tzinfo=timezone.utc)
 
-TAIPEI_DEFAULT = {"name": "台北市", "lat": 25.033, "lon": 121.565, "timezone": "Asia/Taipei"}
+TAIPEI_DEFAULT = {"name": "台北市", "lat": 25.033, "lon": 121.565, "timezone": "Asia/Taipei",
+                  "country_code": "tw"}
 
 OPEN_METEO = {
     "timezone": "Asia/Taipei",

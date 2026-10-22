@@ -6,7 +6,7 @@ from ww_config import KEY_FILE_NAME, ensure_private_dir, mask, resolve_lang, sav
 from ww_errors import WwError
 from ww_http import HttpError
 from ww_model import Place
-from ww_places import resolve_place, with_timezone
+from ww_places import resolve_place, reverse, with_timezone
 from ww_sources import fetch_weatherkit
 
 # Where the WeatherKit test request asks for weather when no default place is set
@@ -38,12 +38,28 @@ def show(cfg: dict, d: Path) -> str:
 
 def set_default(query: str, global_search: bool, cfg: dict, d: Path, lang: str, http) -> str:
     place = with_timezone(resolve_place(query, cfg, lang, global_search, http), http)
-    cfg["default"] = {"name": place.name, "lat": place.lat, "lon": place.lon, "timezone": place.timezone}
+    cfg["default"] = {"name": place.name, "lat": place.lat, "lon": place.lon, "timezone": place.timezone,
+                      "country_code": place.country_code, "region": place.region, "locality": place.locality}
     save_config(d, cfg)
     return (
         f"saved: default = {place.name} ({place.lat:.3f}, {place.lon:.3f}) timezone={place.timezone}\n"
         "action: confirm with the user that this is the right place"
     )
+
+
+def ensure_default_complete(cfg: dict, d: Path, lang: str, http) -> None:
+    """Defaults saved before country codes existed get one reverse lookup, written back for good."""
+    df = cfg.get("default")
+    if not df or df.get("country_code"):
+        return
+    try:
+        found = reverse(df["lat"], df["lon"], lang, http)
+    except WwError:
+        return  # try again next run; the weather itself does not need it
+    if not found.country_code:
+        return
+    df.update(country_code=found.country_code, region=found.region, locality=found.locality)
+    save_config(d, cfg)
 
 
 def set_lang(lang: str, cfg: dict, d: Path) -> str:
