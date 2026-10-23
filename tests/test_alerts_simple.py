@@ -148,3 +148,12 @@ def test_nws_failed_point_is_unavailable_for_that_place_only():
     assert ny == [] and isinstance(flag, HttpError)
     res, _, _ = ww_alerts.collect([NYC, FLAGSTAFF], h, NOW)
     assert (res[0].status, res[1].status, res[1].reason) == ("ok", "unavailable", "us HTTP 500")
+
+
+def test_hko_bad_timestamp_skips_only_that_entry():
+    h = hko({"WHOT": {"name": "酷熱天氣警告", "code": "WHOT", "updateTime": "yesterday"},
+             "WRAIN": {"name": "黃色暴雨警告信號", "code": "WRAINA", "updateTime": "2026-10-22T07:15:00+08:00",
+                       "expireTime": "not a time"},
+             "WTS": {"name": "雷暴警告", "code": "WTS", "updateTime": "2026-10-22T07:15:00+08:00"}})
+    (alerts,) = ww_alerts_hk.alerts_for([HK1], h, NOW)
+    assert [a.key for a in alerts] == ["hko:WTS"]

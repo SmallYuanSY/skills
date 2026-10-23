@@ -33,12 +33,16 @@ def _alerts(data: dict) -> list[Alert]:
     for key, w in data.items():
         if not isinstance(w, dict) or key in SKIP or w.get("actionCode") == "CANCEL" or w.get("code") == "CANCEL":
             continue
+        try:
+            expires, updated = _time(w.get("expireTime")), _time(w.get("updateTime"))
+        except (ValueError, TypeError):
+            continue  # one unreadable timestamp must not make all of Hong Kong unavailable
         code = w.get("code") or key
         # per the API doc, WTCSGNL's name is generic and "type" holds the specific signal
         title = (w.get("type") if key == "WTCSGNL" else None) or w.get("name") or f"天氣警告 ({code})"
         out.append(Alert(KINDS.get(key, "other"), "severe" if code in SEVERE_CODES else "moderate",
                          title, title[:LIMIT], " ".join(x for x in (w.get("name"), w.get("type")) if x) or title,
-                         _time(w.get("expireTime")), _time(w.get("updateTime")), "hko", f"hko:{code}"))
+                         expires, updated, "hko", f"hko:{code}"))
     return out
 
 
