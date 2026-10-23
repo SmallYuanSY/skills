@@ -57,9 +57,11 @@ def _recent(props: dict, now: datetime) -> bool:
     if props.get("iscurrent") != "true":
         return False
     try:
-        end = datetime.fromisoformat(props["todate"]).replace(tzinfo=timezone.utc)  # GDACS times are UTC
-    except (KeyError, ValueError):
+        end = datetime.fromisoformat(props["todate"])
+    except (KeyError, ValueError, TypeError):
         return False
+    if end.tzinfo is None:
+        end = end.replace(tzinfo=timezone.utc)  # GDACS gives naive UTC; an explicit offset is kept
     return now - end <= timedelta(hours=MAX_AGE_HOURS)
 
 
@@ -70,9 +72,8 @@ def _affects(c: Cyclone, place: Place) -> bool:
     return ww_geo.distance_to_path_km(place.lat, place.lon, path) <= NEAR_KM
 
 
-def _cyclone(feature: dict, http) -> Cyclone:
+def _cyclone(feature: dict, start: tuple[float, float], http) -> Cyclone:
     props = feature["properties"]
-    start = _latlon(feature["geometry"]["coordinates"])
     sev = props.get("severitydata", {}).get("severitytext", "")
     try:
         geo = fetch_checked(http, props["url"]["geometry"], lambda b: (features(b), b)[1])
@@ -89,10 +90,10 @@ def nearby(places: list[Place], http, now: datetime) -> list[tuple[Cyclone, list
         try:
             if not _recent(feature["properties"], now):
                 continue
-            lat, lon = _latlon(feature["geometry"]["coordinates"])
-            if all(ww_geo.distance_km(p.lat, p.lon, lat, lon) > FETCH_KM for p in places):
+            start = _latlon(feature["geometry"]["coordinates"])
+            if all(ww_geo.distance_km(p.lat, p.lon, *start) > FETCH_KM for p in places):
                 continue
-            cyclone = _cyclone(feature, http)
+            cyclone = _cyclone(feature, start, http)
         except (KeyError, IndexError, TypeError, ValueError, AttributeError):  # malformed entry
             continue
         indices = [i for i, p in enumerate(places) if _affects(cyclone, p)]

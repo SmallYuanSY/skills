@@ -154,7 +154,7 @@ def test_ncdr_feed_still_has_the_fields_we_parse():
         expires = e.findtext(f"{ww_alerts_tw.CAP}expires")
         if expires:
             assert ww_alerts_tw.parse_ncdr_time(expires).tzinfo is not None
-    assert any(e.findtext(f"{ww_alerts_tw.CAP}status") for e in entries)
+    assert all((e.findtext(f"{ww_alerts_tw.CAP}status") or "").strip() for e in entries)
 
 
 def test_gdacs_list_and_geometry_shape():

@@ -10,7 +10,7 @@ ALERTS = "https://alerts.ncdr.nat.gov.tw/RssAtomFeed.ashx"
 
 def test_same_url_in_one_run_is_fetched_once(tmp_path):
     http = FakeHttp({"https://api.weather.gov/": {"features": []}})
-    c = Cached(http, now_ts=1000, cache_dir=tmp_path)
+    c = Cached(http, now_ts=1000, directory=tmp_path)
     c("https://api.weather.gov/alerts/active?point=1,2")
     c("https://api.weather.gov/alerts/active?point=1,2")
     assert len(http.calls) == 1
@@ -37,11 +37,14 @@ def test_errors_are_not_cached(tmp_path):
     http = FakeHttp({"https://api.weather.gov/": flaky})
     with pytest.raises(HttpError):
         Cached(http, 1000, tmp_path)("https://api.weather.gov/x")
-    c = Cached(http, 1000, tmp_path)
+    assert list(tmp_path.iterdir()) == []
+    failing = FakeHttp({"https://api.weather.gov/": WwError("network_error", "x")})
     with pytest.raises(WwError):
-        Cached(FakeHttp({"https://api.weather.gov/": WwError("network_error", "x")}), 1000, tmp_path)("https://api.weather.gov/x")
+        Cached(failing, 1000, tmp_path)("https://api.weather.gov/x")
+    assert list(tmp_path.iterdir()) == []  # nothing cached for either failure
+    c = Cached(http, 1000, tmp_path)
     assert c("https://api.weather.gov/x") == {"features": []}
-    assert len(http.calls) == 2
+    assert len(http.calls) == 2 and len(failing.calls) == 1  # refetched after each failure
 
 
 def test_broken_cache_file_is_ignored(tmp_path):
@@ -51,6 +54,8 @@ def test_broken_cache_file_is_ignored(tmp_path):
         f.write_text("not json{{")
     assert Cached(http, 1001, tmp_path)(ALERTS, text=True) == "<feed/>"
     assert len(http.calls) == 2
+    assert Cached(http, 1002, tmp_path)(ALERTS, text=True) == "<feed/>"
+    assert len(http.calls) == 2  # the broken file was overwritten with a good copy
 
 
 def test_unwritable_cache_dir_is_ignored(tmp_path):
@@ -160,3 +165,10 @@ def test_last_good_copy_older_than_an_hour_is_not_used(tmp_path):
 
 def test_meteoalarm_still_counts_for_alerts_as_of():
     assert "https://feeds.meteoalarm.org/api/v1/warnings/feeds-germany".startswith(ALERT_SOURCES)
+
+
+def test_relative_xdg_cache_home_is_ignored(monkeypatch, tmp_path):
+    monkeypatch.delenv("WEATHERWISE_CACHE_DIR")
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("XDG_CACHE_HOME", "relative/cache")  # the XDG spec says to ignore relative paths
+    assert cache_dir() == tmp_path / ".cache" / "weatherwise"

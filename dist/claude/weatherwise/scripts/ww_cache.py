@@ -36,11 +36,10 @@ def cache_dir() -> Path:
     override = os.environ.get("WEATHERWISE_CACHE_DIR")
     if override:
         return Path(override).expanduser()
-    base = os.environ.get("XDG_CACHE_HOME") or "~/.cache"
+    base = os.environ.get("XDG_CACHE_HOME") or ""
+    if not os.path.isabs(base):  # the XDG spec: a relative path is invalid and must be ignored
+        base = "~/.cache"
     return Path(base).expanduser() / "weatherwise"
-
-
-_default_dir = cache_dir  # Cached.__init__ shadows the name with its parameter
 
 
 def ttl_for(url: str) -> int:
@@ -56,10 +55,10 @@ class Cached:
     """Wraps a fetcher with the same signature as ww_http.get. Failures are never cached,
     and any cache-file problem just means a normal fetch."""
 
-    def __init__(self, http, now_ts: int, cache_dir: Path | None = None):
+    def __init__(self, http, now_ts: int, directory: Path | None = None):
         self.http = http
         self.now_ts = now_ts
-        self.dir = cache_dir if cache_dir is not None else _default_dir()
+        self.dir = directory if directory is not None else cache_dir()
         self.memo: dict = {}
         self.disk_times: dict[str, int] = {}  # url -> when the disk copy we used was written
         self.last_good: dict = {}  # (url, text) -> (body, written) of the expired copy a refetch replaced

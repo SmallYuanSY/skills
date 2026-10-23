@@ -44,8 +44,7 @@ def test_champi_is_near_taipei_and_jiaoxi():
 def test_far_cyclone_is_ignored_and_its_geometry_not_fetched():
     h = http()
     ww_cyclones.nearby([TAIPEI], h, GDACS_NOW)
-    urls = [u for u, _ in h.calls]
-    assert GEO + "1001338" in "".join(urls) and "1001339" not in "".join(urls)
+    assert [u for u, _ in h.calls] == [ww_cyclones.LIST_URL, GEO + "1001338&episodeid=33"]
 
 
 def test_cyclone_not_near_berlin():
@@ -114,8 +113,11 @@ def test_garbage_geometry_is_not_cached(tmp_path):
 def test_unreadable_geometry_far_from_centroid_is_not_reported():
     h = FakeHttp({ww_cyclones.LIST_URL: json.loads(fixture("gdacs_list.json")),
                   GEO + "1001338": RuntimeError("boom")})
-    hanoi = Place("河內", 21.03, 105.85, "Asia/Bangkok", "vn")  # ~1900 km: fetched, but beyond NEAR_KM
+    hanoi = Place("河內", 21.03, 105.85, "Asia/Bangkok", "vn")  # ~2000 km: clearly fetched, clearly beyond NEAR_KM
+    km = ww_geo.distance_km(hanoi.lat, hanoi.lon, 21.2, 124.9)
+    assert ww_cyclones.NEAR_KM + 500 < km < ww_cyclones.FETCH_KM - 500
     assert ww_cyclones.nearby([hanoi], h, GDACS_NOW) == []
+    assert any(u.startswith(GEO + "1001338") for u, _ in h.calls)  # the geometry was tried
 
 
 def test_malformed_list_entry_skips_only_that_entry():
@@ -194,3 +196,12 @@ def test_gdacs_no_content_means_no_cyclone_not_unavailable():
     h = FakeHttp({ww_cyclones.LIST_URL: lambda u: None, ww_alerts_tw.FEED: fixture("ncdr.xml")})
     got = ww_alerts.collect([TAIPEI], h, GDACS_NOW)
     assert (got.cyclones, got.cyclone_error) == ([], None)
+
+
+def test_a_todate_with_its_own_offset_keeps_it():
+    data = json.loads(fixture("gdacs_list.json"))
+    data["features"][0]["properties"]["todate"] = "2026-10-21T20:00:00+08:00"  # 12:00Z, 24.5 h before now
+    h = FakeHttp({ww_cyclones.LIST_URL: data, GEO + "1001338": json.loads(fixture("gdacs_geometry.json"))})
+    assert ww_cyclones.nearby([TAIPEI], h, GDACS_NOW) == []
+    data["features"][0]["properties"]["todate"] = "2026-10-22T08:00:00+08:00"  # 00:00Z, 12.5 h before
+    assert names(ww_cyclones.nearby([TAIPEI], h, GDACS_NOW)) == {"CHAMPI-26": [0]}
