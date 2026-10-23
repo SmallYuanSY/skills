@@ -9,9 +9,10 @@ from ww_errors import WwError
 from ww_http import HttpError
 from ww_model import Place
 
-NOMINATIM = "https://nominatim.openstreetmap.org/search"
-NOMINATIM_REVERSE = "https://nominatim.openstreetmap.org/reverse"
-PAUSE = 1.1  # seconds between Nominatim requests of one lookup
+NOMINATIM_HOST = "https://nominatim.openstreetmap.org"
+NOMINATIM = f"{NOMINATIM_HOST}/search"
+NOMINATIM_REVERSE = f"{NOMINATIM_HOST}/reverse"
+PAUSE = 1.1  # seconds between live Nominatim requests
 SMALL_PLACES = {"village", "hamlet", "suburb", "neighbourhood", "quarter", "isolated_dwelling"}
 CJK = re.compile(r"[\u3400-\u9fff]")
 ADMIN_SUFFIXES = ("區", "鄉", "鎮", "市", "縣")
@@ -19,6 +20,33 @@ OPEN_METEO = "https://api.open-meteo.com/v1/forecast"
 SAR = {"CN-HK": "hk", "CN-MO": "mo"}
 JP_CODE = re.compile(r"JP-(\d\d)")
 COORDS = re.compile(r"^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$")
+
+
+class Paced:
+    """The one place Nominatim requests are paced (one per second): it waits right before a request that
+    will really hit the network, and only when an earlier one in this run already did. A cached lookup
+    (the wrapped fetcher's is_fresh) never waits."""
+
+    def __init__(self, http):
+        self.http = http
+        self.live = False
+
+    def __call__(self, url: str, headers: dict | None = None, *, text: bool = False):
+        is_fresh = getattr(self.http, "is_fresh", None)
+        if url.startswith(NOMINATIM_HOST) and not (is_fresh and is_fresh(url, text)):
+            if self.live:
+                time.sleep(PAUSE)
+            self.live = True
+        return self.http(url, headers, text=text)
+
+    def evict(self, url: str, text: bool = False):
+        evict = getattr(self.http, "evict", None)
+        return evict(url, text) if evict else None
+
+
+def paced(http) -> Paced:
+    """Every entry point that may ask Nominatim wraps its fetcher once; an already paced one is kept."""
+    return http if isinstance(http, Paced) else Paced(http)
 
 
 def _get(http, url: str, service: str):
@@ -29,6 +57,7 @@ def _get(http, url: str, service: str):
 
 
 def resolve_place(query: str | None, cfg: dict, lang: str, global_search: bool, http) -> Place:
+    http = paced(http)
     if not query:
         d = cfg.get("default")
         if not d:
@@ -49,10 +78,9 @@ def localize(place: Place, http) -> Place:
     """Alert feeds match region/locality/district by name, in the local language (MeteoAlarm "Berlin",
     JMA 千代田区), so places outside Taiwan get those three fields from a reverse lookup without
     accept-language. The name stays in the user's language. A failed lookup keeps what we have."""
+    http = paced(http)
     if not place.country_code or place.country_code == "tw":
         return place
-    if not getattr(http, "paces", False):
-        time.sleep(PAUSE)  # Nominatim allows one request per second
     try:
         local = reverse(place.lat, place.lon, None, http)
     except WwError:
@@ -96,7 +124,6 @@ def _district_by_suffix(query: str, base: dict, first: dict, http) -> dict | Non
     if first.get("type") not in SMALL_PLACES or query.endswith(ADMIN_SUFFIXES) or not CJK.search(query):
         return None
     for suffix in ("區", "鄉", "鎮"):
-        time.sleep(PAUSE)  # Nominatim allows one request per second
         try:
             results = _search({**base, "q": query + suffix}, http)
         except WwError:
@@ -108,12 +135,11 @@ def _district_by_suffix(query: str, base: dict, first: dict, http) -> dict | Non
 
 
 def geocode(query: str, lang: str, global_search: bool, http) -> Place:
+    http = paced(http)
     base = {"q": query, "format": "json", "addressdetails": 1, "limit": 5, "accept-language": lang}
     # Taiwan first, then worldwide; --global goes straight to worldwide
     attempts = [base] if global_search else [{**base, "countrycodes": "tw"}, base]
-    for i, params in enumerate(attempts):
-        if i:
-            time.sleep(PAUSE)
+    for params in attempts:
         res = _search(params, http)
         if res:
             taiwan = "countrycodes" in params
@@ -128,6 +154,7 @@ def geocode(query: str, lang: str, global_search: bool, http) -> Place:
 
 def reverse(lat: float, lon: float, lang: str | None, http) -> Place:
     """lang None asks without accept-language, which makes Nominatim answer in the place's own language."""
+    http = paced(http)
     q = urllib.parse.urlencode({"format": "json", "addressdetails": 1, "zoom": 14, "lat": lat, "lon": lon,
                                 **({"accept-language": lang} if lang else {})})
     r = _get(http, f"{NOMINATIM_REVERSE}?{q}", "nominatim")

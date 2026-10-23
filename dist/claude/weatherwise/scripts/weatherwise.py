@@ -13,7 +13,6 @@ import argparse
 import json
 import os
 import sys
-import time
 from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -23,13 +22,12 @@ from ww_cache import ALERT_SOURCES, Cached  # noqa: E402
 from ww_config import config_dir, load_config, resolve_lang, weatherkit_settings  # noqa: E402
 from ww_errors import WwError  # noqa: E402
 from ww_http import REPO, VERSION, HttpError, get  # noqa: E402
-from ww_places import PAUSE, resolve_place, with_timezone  # noqa: E402
+from ww_places import Paced, resolve_place, with_timezone  # noqa: E402
 from ww_render import render, render_error, render_json  # noqa: E402
 from ww_sources import fetch_open_meteo_many, fetch_weatherkit  # noqa: E402
 from ww_setup import ensure_default_complete, remove_weatherkit, set_default, set_lang, set_weatherkit, show  # noqa: E402
 
 MAX_PLACES = 5
-NOMINATIM_HOST = "https://nominatim.openstreetmap.org"
 VERSION_LINE = f"weatherwise {VERSION} · by SmallYuan · {REPO}"
 AUTH_FALLBACK = (
     "weatherkit_auth_failed (HTTP {status}), fell back to open-meteo; tell the user their "
@@ -77,26 +75,6 @@ def _forecasts(places: list, days: int, lang: str, wk, http, now_ts: int):
             for i in fallback:
                 out[i] = e
     return out, notice
-
-
-class Paced:
-    """Nominatim allows one request per second: wait before a lookup that will really hit the network
-    when an earlier one already did. Cached lookups never wait."""
-
-    def __init__(self, cached: Cached):
-        self.cached = cached
-        self.live = False
-        self.paces = True  # ww_places.localize leaves the pause to us
-
-    def __call__(self, url: str, headers: dict | None = None, *, text: bool = False):
-        if url.startswith(NOMINATIM_HOST) and not self.cached.is_fresh(url, text):
-            if self.live:
-                time.sleep(PAUSE)
-            self.live = True
-        return self.cached(url, headers, text=text)
-
-    def evict(self, url: str, text: bool = False):
-        return self.cached.evict(url, text)
 
 
 def _alerts_as_of(cached: Cached, now: datetime) -> datetime:

@@ -6,7 +6,7 @@ from ww_config import KEY_FILE_NAME, ensure_private_dir, mask, resolve_lang, sav
 from ww_errors import WwError
 from ww_http import HttpError
 from ww_model import Place, one_variant
-from ww_places import localize, resolve_place, reverse, with_timezone
+from ww_places import localize, paced, resolve_place, reverse, with_timezone
 from ww_sources import fetch_weatherkit
 
 # Where the WeatherKit test request asks for weather when no default place is set
@@ -53,6 +53,7 @@ def ensure_default_complete(cfg: dict, d: Path, lang: str, http) -> None:
     df = cfg.get("default")
     if not df or df.get("country_code"):
         return
+    http = paced(http)  # the reverse and the localize below are two Nominatim requests
     try:
         found = reverse(df["lat"], df["lon"], lang, http)
     except WwError:

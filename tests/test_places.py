@@ -350,3 +350,13 @@ def test_japan_without_an_iso_code_keeps_the_old_logic():
     old = {**YAKUSHIMA_ZH, "address": {k: v for k, v in YAKUSHIMA_ZH["address"].items() if k != "ISO3166-2-lvl4"}}
     p = geocode("屋久島町", "zh-TW", True, FakeHttp({NOMINATIM: [old], NOMINATIM_REVERSE: HttpError(429)}))
     assert p.region == "鹿儿岛县"
+
+
+def test_a_bare_fetcher_still_gets_one_pause_between_live_nominatim_requests(monkeypatch):
+    berlin = {"display_name": "Berlin, Deutschland", "lat": "52.517", "lon": "13.389",
+              "address": {"city": "Berlin", "state": "Berlin", "country_code": "de"}}
+    sleeps = []
+    monkeypatch.setattr("time.sleep", sleeps.append)
+    http = FakeHttp({NOMINATIM: lambda u: [] if "countrycodes" in u else [berlin], NOMINATIM_REVERSE: berlin})
+    geocode("Berlin", "de", False, http)
+    assert len(http.calls) == 3 and len(sleeps) == 2  # Taiwan, worldwide, reverse for local names

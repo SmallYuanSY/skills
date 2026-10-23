@@ -294,3 +294,23 @@ def test_json_has_alerts_as_of_like_the_text_header(config_dir, capsys):
     capsys.readouterr()
     weatherwise.main(["板橋", "--json"], http=world(), now=NOW.replace(minute=40))
     assert json.loads(capsys.readouterr().out)["alerts_as_of"] == "2026-10-07T20:30:00+08:00"
+
+
+BERLIN = {"display_name": "Berlin, 德国;德國", "lat": "52.517", "lon": "13.389",
+          "address": {"city": "Berlin", "state": "Berlin", "country_code": "de"}}
+
+
+def test_one_pause_per_live_nominatim_request_in_a_multi_attempt_lookup(config_dir, capsys, monkeypatch):
+    def search(url):
+        if "Berlin" in url:
+            return [] if "countrycodes" in url else [BERLIN]
+        return geocoder(url)
+
+    http = world(**{NOM: search, "https://nominatim.openstreetmap.org/reverse": BERLIN,
+                    "https://feeds.meteoalarm.org/": {"warnings": []}})
+    sleeps = []
+    monkeypatch.setattr("time.sleep", sleeps.append)
+    code, _ = run(["板橋", "Berlin"], http, capsys)
+    live = [u for u, _ in http.calls if u.startswith("https://nominatim.openstreetmap.org")]
+    assert code == 0 and len(live) == 4  # 板橋; Berlin in Taiwan, worldwide; Berlin reverse (local names)
+    assert len(sleeps) == len(live) - 1  # one pause before each live request after the first
