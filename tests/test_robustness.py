@@ -9,9 +9,9 @@ from conftest import NOW, OPEN_METEO, TAIPEI_DEFAULT, WEATHERKIT, FakeHttp
 from ww_config import load_config, save_config
 from ww_errors import WwError
 from ww_http import HttpError
-from ww_model import Place
+from ww_model import Place, PlaceAlerts
 from ww_places import NOMINATIM, OPEN_METEO as OM_URL, geocode, with_timezone
-from ww_render import render_report
+from ww_render import render
 from ww_sources import parse_open_meteo, parse_weatherkit
 
 OM = "https://api.open-meteo.com/"
@@ -39,7 +39,7 @@ def test_timezone_lookup_failure_is_a_service_error():
 def test_non_json_response_is_a_service_error(monkeypatch):
     monkeypatch.setattr(ww_http.urllib.request, "urlopen", lambda req, timeout: io.BytesIO(b"<html>login</html>"))
     with pytest.raises(WwError) as e:
-        ww_http.get_json("https://example.com/")
+        ww_http.get("https://example.com/")
     assert e.value.code == "service_error"
 
 
@@ -76,15 +76,16 @@ def test_null_temperatures_render_as_unknown():
             "current": {**OPEN_METEO["current"], "temperature_2m": None, "apparent_temperature": None},
             "daily": {**OPEN_METEO["daily"], "temperature_2m_max": [None, 27.4]}}
     report = parse_open_meteo(data)
-    out = render_report(report, Place("台北市", 25.033, 121.565, "Asia/Taipei"), NOW)
-    assert "current: Partly Cloudy, unknown, feels unknown" in out
-    assert "2026-10-07 Wed: Cloudy, 22–unknown" in out
+    place = Place("台北市", 25.033, 121.565, "Asia/Taipei")
+    out = render([(place, report, PlaceAlerts("ok", []))], [], NOW, NOW, 3, None, False)
+    assert "now: Partly Cloudy unknown" in out
+    assert "2026-10-07 Wed: Cloudy, 22–unknown°C" in out
 
 
 def test_weatherkit_schema_change_is_a_service_error():
     data = {**WEATHERKIT, "currentWeather": {"temperature": 20}}  # conditionCode missing
     with pytest.raises(WwError) as e:
-        parse_weatherkit(data, "Asia/Taipei", 3, alerts_available=False)
+        parse_weatherkit(data, "Asia/Taipei", 3)
     assert e.value.code == "service_error"
 
 
@@ -98,7 +99,7 @@ def test_open_meteo_schema_change_is_a_service_error():
 def test_unexpected_exception_never_shows_a_traceback(config_dir, capsys):
     save_config(config_dir, {"default": TAIPEI_DEFAULT})
 
-    def explode(url, headers=None):
+    def explode(url, headers=None, *, text=False):
         raise RuntimeError("secret detail that must not be printed")
 
     code, out = run([], explode, capsys)
@@ -106,3 +107,32 @@ def test_unexpected_exception_never_shows_a_traceback(config_dir, capsys):
     assert out.startswith("error: internal_error (RuntimeError)\naction: ")
     assert "secret detail" not in out
     assert "Traceback" not in out
+
+
+def test_text_mode_returns_the_decoded_body(monkeypatch):
+    body = "<feed>颱風</feed>".encode()
+    monkeypatch.setattr(ww_http.urllib.request, "urlopen", lambda req, timeout: io.BytesIO(body))
+    assert ww_http.get("https://example.com/", text=True) == "<feed>颱風</feed>"
+
+
+class _NoContent(io.BytesIO):
+    status = 204
+
+
+def test_204_no_content_is_nothing_not_a_broken_body(monkeypatch):
+    monkeypatch.setattr(ww_http.urllib.request, "urlopen", lambda req, timeout: _NoContent(b""))
+    assert ww_http.get("https://example.com/") is None
+    assert ww_http.get("https://example.com/", text=True) == ""
+
+
+@pytest.mark.parametrize("url,timeout", [
+    ("https://www.gdacs.org/gdacsapi/api/events/geteventlist/SEARCH?eventlist=TC", 30),
+    ("https://www.gdacs.org/gdacsapi/api/polygons/getgeometry?eventtype=TC&eventid=1", 30),
+    ("https://alerts.ncdr.nat.gov.tw/RssAtomFeed.ashx", 15),
+    ("https://nominatim.openstreetmap.org/search?q=x", 15),
+])
+def test_gdacs_gets_a_longer_timeout(monkeypatch, url, timeout):
+    seen = []
+    monkeypatch.setattr(ww_http.urllib.request, "urlopen", lambda req, timeout: seen.append(timeout) or io.BytesIO(b"{}"))
+    ww_http.get(url)
+    assert seen == [timeout]

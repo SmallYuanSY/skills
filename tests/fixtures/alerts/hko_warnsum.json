@@ -1,0 +1,8 @@
+{
+ "WRAIN": {"name": "黃色暴雨警告信號", "code": "WRAINA", "actionCode": "ISSUE",
+           "issueTime": "2026-10-22T07:15:00+08:00", "expireTime": "2026-10-22T10:15:00+08:00",
+           "updateTime": "2026-10-22T07:15:00+08:00"},
+ "WTCSGNL": {"name": "熱帶氣旋警告信號", "code": "TC8NE", "actionCode": "ISSUE",
+             "type": "八號東北烈風或暴風信號",
+             "issueTime": "2026-10-22T05:40:00+08:00", "updateTime": "2026-10-22T05:40:00+08:00"}
+}

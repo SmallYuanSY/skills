@@ -5,8 +5,8 @@ from pathlib import Path
 from ww_config import KEY_FILE_NAME, ensure_private_dir, mask, resolve_lang, save_config, weatherkit_settings
 from ww_errors import WwError
 from ww_http import HttpError
-from ww_model import Place
-from ww_places import resolve_place, with_timezone
+from ww_model import Place, one_variant
+from ww_places import local_names, localize, paced, resolve_place, reverse, with_timezone
 from ww_sources import fetch_weatherkit
 
 # Where the WeatherKit test request asks for weather when no default place is set
@@ -17,7 +17,7 @@ def show(cfg: dict, d: Path) -> str:
     lines = [f"config: {d / 'config.json'}", f"lang: {resolve_lang(None, cfg)}"]
     df = cfg.get("default")
     lines.append(
-        f"default: {df['name']} ({df['lat']:.3f}, {df['lon']:.3f}) timezone={df.get('timezone')}"
+        f"default: {one_variant(df['name'])} ({df['lat']:.3f}, {df['lon']:.3f}) timezone={df.get('timezone')}"
         if df else "default: none"
     )
     try:
@@ -38,12 +38,42 @@ def show(cfg: dict, d: Path) -> str:
 
 def set_default(query: str, global_search: bool, cfg: dict, d: Path, lang: str, http) -> str:
     place = with_timezone(resolve_place(query, cfg, lang, global_search, http), http)
-    cfg["default"] = {"name": place.name, "lat": place.lat, "lon": place.lon, "timezone": place.timezone}
+    cfg["default"] = {"name": place.name, "lat": place.lat, "lon": place.lon, "timezone": place.timezone,
+                      "country_code": place.country_code, "region": place.region, "locality": place.locality,
+                      "district": place.district}
     save_config(d, cfg)
     return (
-        f"saved: default = {place.name} ({place.lat:.3f}, {place.lon:.3f}) timezone={place.timezone}\n"
+        f"saved: default = {one_variant(place.name)} ({place.lat:.3f}, {place.lon:.3f}) timezone={place.timezone}\n"
         "action: confirm with the user that this is the right place"
     )
+
+
+def ensure_default_complete(cfg: dict, d: Path, lang: str, http) -> None:
+    """Defaults saved before country codes existed get one reverse lookup, written back for good. One
+    abroad saved before local names existed (no district key) gets the local-name lookup once; a place
+    that has no district gets "" so the lookup is not repeated. Only a failed lookup is retried."""
+    df = cfg.get("default")
+    if not df:
+        return
+    http = paced(http)  # the reverse and the localize below are two Nominatim requests
+    cc = df.get("country_code")
+    if cc:
+        if cc == "tw" or df.get("district") is not None:
+            return
+        local = local_names(Place(df["name"], df["lat"], df["lon"], df.get("timezone"), cc), http)
+        if local is not None:  # a failed lookup changes nothing; try again next run
+            df.update(region=local.region, locality=local.locality, district=local.district or "")
+            save_config(d, cfg)
+        return
+    try:
+        found = reverse(df["lat"], df["lon"], lang, http)
+    except WwError:
+        return  # try again next run; the weather itself does not need it
+    if not found.country_code:
+        return
+    found = localize(found, http)
+    df.update(country_code=found.country_code, region=found.region, locality=found.locality, district=found.district)
+    save_config(d, cfg)
 
 
 def set_lang(lang: str, cfg: dict, d: Path) -> str:
@@ -52,7 +82,7 @@ def set_lang(lang: str, cfg: dict, d: Path) -> str:
     return f"saved: lang = {cfg['lang']}"
 
 
-def set_weatherkit(team_id, service_id, key_file, key_id, country_code, cfg, d, lang, http, now_ts) -> str:
+def set_weatherkit(team_id, service_id, key_file, key_id, cfg, d, lang, http, now_ts) -> str:
     src = Path(key_file).expanduser()
     if not src.is_file():
         raise WwError("invalid_key_file", str(src))
@@ -68,9 +98,9 @@ def set_weatherkit(team_id, service_id, key_file, key_id, country_code, cfg, d, 
         raise WwError("weatherkit_config_incomplete", ", ".join(missing) + hint)
 
     wk = {"team_id": team_id, "key_id": key_id, "service_id": service_id,
-          "key_path": str(src), "country_code": country_code}
+          "key_path": str(src)}
     df = cfg.get("default")
-    place = Place(df["name"], df["lat"], df["lon"], df.get("timezone")) if df else TEST_PLACE
+    place = Place(df["name"], df["lat"], df["lon"], df.get("timezone"), df.get("country_code")) if df else TEST_PLACE
     place = with_timezone(place, http)
     try:  # one real request before anything is written
         fetch_weatherkit(place, 1, lang, wk, http, now_ts)

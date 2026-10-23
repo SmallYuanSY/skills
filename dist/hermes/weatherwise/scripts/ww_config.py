@@ -55,6 +55,9 @@ def _shape_problem(cfg) -> str | None:
             ZoneInfo(d["timezone"])
         except (KeyError, ValueError, TypeError):  # ZoneInfoNotFoundError is a KeyError
             return "default.timezone is not a valid time zone"
+    for key in ("country_code", "region", "locality", "district"):
+        if d.get(key) is not None and not isinstance(d[key], str):
+            return f"default.{key} must be a string"
     return None
 
 

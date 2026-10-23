@@ -1,0 +1,593 @@
+{
+ "_note": "Real MeteoAlarm feeds-germany warnings (DWD), trimmed to en+de infos and a few areas; one warning had an area renamed/added as 'Berlin' because no Berlin warning was active at capture time. Fields: warnings[].alert.{identifier,sent,msgType,status,info[]}; info.{language,category[],event,headline,description,severity,expires,parameter[awareness_type],area[].areaDesc}. No area carries a polygon (geocode EMMA_ID/WARNCELLID only), so coverage is matched on areaDesc.",
+ "warnings": [
+  {
+   "alert": {
+    "code": [
+     "id:2.49.0.0.276.0.DWD.PVW.1792209000000.ff0138cb-7b17-411c-8858-7fd7158a7356",
+     "MCP:v2.0"
+    ],
+    "identifier": "2.49.0.0.276.0.DWD.PVW.1792209000000.ff0138cb-7b17-411c-8858-7fd7158a7356.MUL",
+    "incidents": "Update",
+    "info": [
+     {
+      "area": [
+       {
+        "altitude": 0.0,
+        "areaDesc": "Kreis Main-Spessart",
+        "ceiling": 9842.5197,
+        "geocode": [
+         {
+          "value": "DE304",
+          "valueName": "EMMA_ID"
+         },
+         {
+          "value": "109677000",
+          "valueName": "WARNCELLID"
+         }
+        ]
+       },
+       {
+        "altitude": 0.0,
+        "areaDesc": "Berlin",
+        "ceiling": 9842.5197,
+        "geocode": [
+         {
+          "value": "DE001",
+          "valueName": "EMMA_ID"
+         }
+        ]
+       }
+      ],
+      "category": [
+       "Met"
+      ],
+      "certainty": "Likely",
+      "contact": "Deutscher Wetterdienst",
+      "description": "Es tritt gebietsweise Nebel mit Sichtweiten unter 150 Metern auf.",
+      "event": "NEBEL",
+      "eventCode": [
+       {
+        "value": "2.1.14",
+        "valueName": "PROFILE_VERSION"
+       },
+       {
+        "value": "© GeoBasis-DE / BKG 2021 (Daten modifiziert)",
+        "valueName": "LICENSE"
+       },
+       {
+        "value": "59",
+        "valueName": "II"
+       },
+       {
+        "value": "FOG",
+        "valueName": "GROUP"
+       },
+       {
+        "value": "255 235 59",
+        "valueName": "AREA_COLOR"
+       }
+      ],
+      "expires": "2026-10-17T09:00:00+02:00",
+      "headline": "Amtliche WARNUNG vor NEBEL",
+      "instruction": "Hinweis auf: mögliche starke Sichteinschränkungen. \nHandlungsempfehlungen: \nFahrverhalten an plötzlich auftretende Sichtbehinderungen (Nebelbänke) anpassen",
+      "language": "de-DE",
+      "onset": "2026-10-17T05:50:00+02:00",
+      "parameter": [
+       {
+        "value": "<150 [m]",
+        "valueName": "visibility"
+       },
+       {
+        "value": "mögliche starke Sichteinschränkungen",
+        "valueName": "impacts"
+       },
+       {
+        "value": "2; yellow; Moderate",
+        "valueName": "awareness_level"
+       },
+       {
+        "value": "4; Fog",
+        "valueName": "awareness_type"
+       }
+      ],
+      "responseType": [
+       "Prepare"
+      ],
+      "senderName": "Deutscher Wetterdienst",
+      "severity": "Minor",
+      "urgency": "Immediate",
+      "web": "https://dwd.de/warnungen"
+     },
+     {
+      "area": [
+       {
+        "altitude": 0.0,
+        "areaDesc": "Kreis Main-Spessart",
+        "ceiling": 9842.5197,
+        "geocode": [
+         {
+          "value": "DE304",
+          "valueName": "EMMA_ID"
+         },
+         {
+          "value": "109677000",
+          "valueName": "WARNCELLID"
+         }
+        ]
+       },
+       {
+        "altitude": 0.0,
+        "areaDesc": "Berlin",
+        "ceiling": 9842.5197,
+        "geocode": [
+         {
+          "value": "DE001",
+          "valueName": "EMMA_ID"
+         }
+        ]
+       }
+      ],
+      "category": [
+       "Met"
+      ],
+      "certainty": "Likely",
+      "contact": "Deutscher Wetterdienst",
+      "description": "There is a risk of fog (level 1 of 1).\nVisibility: < 150 m",
+      "event": "fog",
+      "eventCode": [
+       {
+        "value": "2.1.14",
+        "valueName": "PROFILE_VERSION"
+       },
+       {
+        "value": "© GeoBasis-DE / BKG 2021 (Daten modifiziert)",
+        "valueName": "LICENSE"
+       },
+       {
+        "value": "59",
+        "valueName": "II"
+       },
+       {
+        "value": "FOG",
+        "valueName": "GROUP"
+       },
+       {
+        "value": "255 235 59",
+        "valueName": "AREA_COLOR"
+       }
+      ],
+      "expires": "2026-10-17T09:00:00+02:00",
+      "headline": "Official WARNING of FOG",
+      "instruction": "Hazard(s) to expect: severely reduced visibility possible. \nRecommendations for what to do: \nAdapt your driving behaviour to sudden reduced visibility (fog banks).",
+      "language": "en",
+      "onset": "2026-10-17T05:50:00+02:00",
+      "parameter": [
+       {
+        "value": "<150 [m]",
+        "valueName": "visibility"
+       },
+       {
+        "value": "severely reduced visibility possible",
+        "valueName": "impacts"
+       },
+       {
+        "value": "2; yellow; Moderate",
+        "valueName": "awareness_level"
+       },
+       {
+        "value": "4; Fog",
+        "valueName": "awareness_type"
+       }
+      ],
+      "responseType": [
+       "Prepare"
+      ],
+      "senderName": "Deutscher Wetterdienst",
+      "severity": "Minor",
+      "urgency": "Immediate",
+      "web": "https://dwd.de/warnungen"
+     }
+    ],
+    "msgType": "Update",
+    "references": "opendata@dwd.de,2.49.0.0.276.0.DWD.PVW.1792207620000.1e7b71de-12ab-4a98-a7c5-9c426a753314.MUL,2026-10-17T05:27:00+02:00",
+    "scope": "Public",
+    "sender": "opendata@dwd.de",
+    "sent": "2026-10-17T05:50:00+02:00",
+    "source": "PVW",
+    "status": "Actual"
+   },
+   "uuid": "60ecff0e-5550-4766-a55c-c8bba8ebaac6"
+  },
+  {
+   "alert": {
+    "code": [
+     "id:2.49.0.0.276.0.DWD.PVW.1792224120000.284a006c-0271-42c6-9f1d-7d2084ff157a",
+     "MCP:v2.0"
+    ],
+    "identifier": "2.49.0.0.276.0.DWD.PVW.1792224120000.284a006c-0271-42c6-9f1d-7d2084ff157a.MUL",
+    "incidents": "Alert",
+    "info": [
+     {
+      "area": [
+       {
+        "altitude": 0.0,
+        "areaDesc": "Kreis Rendsburg-Eckernförde - Binnenland",
+        "ceiling": 9842.5197,
+        "geocode": [
+         {
+          "value": "DE031",
+          "valueName": "EMMA_ID"
+         },
+         {
+          "value": "901058001",
+          "valueName": "WARNCELLID"
+         }
+        ]
+       }
+      ],
+      "category": [
+       "Met"
+      ],
+      "certainty": "Likely",
+      "contact": "Deutscher Wetterdienst",
+      "description": "Es treten Windböen mit Geschwindigkeiten bis 55 km/h (15 m/s, 30 kn, Bft 7) anfangs aus nordöstlicher, später aus östlicher Richtung auf. In Schauernähe sowie in exponierten Lagen muss mit Sturmböen bis 65 km/h (18 m/s, 35 kn, Bft 8) gerechnet werden.",
+      "event": "WINDBÖEN",
+      "eventCode": [
+       {
+        "value": "2.1.14",
+        "valueName": "PROFILE_VERSION"
+       },
+       {
+        "value": "© GeoBasis-DE / BKG 2021 (Daten modifiziert)",
+        "valueName": "LICENSE"
+       },
+       {
+        "value": "51",
+        "valueName": "II"
+       },
+       {
+        "value": "WIND",
+        "valueName": "GROUP"
+       },
+       {
+        "value": "255 235 59",
+        "valueName": "AREA_COLOR"
+       }
+      ],
+      "expires": "2026-10-19T02:00:00+02:00",
+      "headline": "Amtliche WARNUNG vor WINDBÖEN",
+      "instruction": "Hinweis auf: umherfliegende leichte Gegenstände. \nHandlungsempfehlungen: \nlose Gegenstände sichern; z.B. Zelte und Abdeckungen befestigen",
+      "language": "de-DE",
+      "onset": "2026-10-17T16:00:00+02:00",
+      "parameter": [
+       {
+        "value": "north-east",
+        "valueName": "wind direction"
+       },
+       {
+        "value": "east",
+        "valueName": "subsequent wind direction"
+       },
+       {
+        "value": "north-east",
+        "valueName": "wind direction"
+       },
+       {
+        "value": "east",
+        "valueName": "wind direction"
+       },
+       {
+        "value": "<55 [km/h]",
+        "valueName": "gusts"
+       },
+       {
+        "value": "umherfliegende leichte Gegenstände",
+        "valueName": "impacts"
+       },
+       {
+        "value": "<65 [km/h]",
+        "valueName": "exposed gusts"
+       },
+       {
+        "value": "2; yellow; Moderate",
+        "valueName": "awareness_level"
+       },
+       {
+        "value": "1; Wind",
+        "valueName": "awareness_type"
+       }
+      ],
+      "responseType": [
+       "Prepare"
+      ],
+      "senderName": "Deutscher Wetterdienst",
+      "severity": "Minor",
+      "urgency": "Immediate",
+      "web": "https://dwd.de/warnungen"
+     },
+     {
+      "area": [
+       {
+        "altitude": 0.0,
+        "areaDesc": "Kreis Rendsburg-Eckernförde - Binnenland",
+        "ceiling": 9842.5197,
+        "geocode": [
+         {
+          "value": "DE031",
+          "valueName": "EMMA_ID"
+         },
+         {
+          "value": "901058001",
+          "valueName": "WARNCELLID"
+         }
+        ]
+       }
+      ],
+      "category": [
+       "Met"
+      ],
+      "certainty": "Likely",
+      "contact": "Deutscher Wetterdienst",
+      "description": "There is a risk of wind gusts (level 1 of 4).\nMax. gusts: < 55 km/h; Wind direction: north-east then east; Increased gusts: near showers and in exposed locations < 65 km/h",
+      "event": "wind gusts",
+      "eventCode": [
+       {
+        "value": "2.1.14",
+        "valueName": "PROFILE_VERSION"
+       },
+       {
+        "value": "© GeoBasis-DE / BKG 2021 (Daten modifiziert)",
+        "valueName": "LICENSE"
+       },
+       {
+        "value": "51",
+        "valueName": "II"
+       },
+       {
+        "value": "WIND",
+        "valueName": "GROUP"
+       },
+       {
+        "value": "255 235 59",
+        "valueName": "AREA_COLOR"
+       }
+      ],
+      "expires": "2026-10-19T02:00:00+02:00",
+      "headline": "Official WARNING of WIND GUSTS",
+      "instruction": "Hazard(s) to expect: light objects flying through the air. \nRecommendations for what to do: \nSecure loose objects. For example, fasten tents and coverings.",
+      "language": "en",
+      "onset": "2026-10-17T16:00:00+02:00",
+      "parameter": [
+       {
+        "value": "north-east",
+        "valueName": "wind direction"
+       },
+       {
+        "value": "east",
+        "valueName": "subsequent wind direction"
+       },
+       {
+        "value": "north-east",
+        "valueName": "wind direction"
+       },
+       {
+        "value": "east",
+        "valueName": "wind direction"
+       },
+       {
+        "value": "<55 [km/h]",
+        "valueName": "gusts"
+       },
+       {
+        "value": "light objects flying through the air",
+        "valueName": "impacts"
+       },
+       {
+        "value": "<65 [km/h]",
+        "valueName": "exposed gusts"
+       },
+       {
+        "value": "2; yellow; Moderate",
+        "valueName": "awareness_level"
+       },
+       {
+        "value": "1; Wind",
+        "valueName": "awareness_type"
+       }
+      ],
+      "responseType": [
+       "Prepare"
+      ],
+      "senderName": "Deutscher Wetterdienst",
+      "severity": "Minor",
+      "urgency": "Immediate",
+      "web": "https://dwd.de/warnungen"
+     }
+    ],
+    "msgType": "Alert",
+    "scope": "Public",
+    "sender": "opendata@dwd.de",
+    "sent": "2026-10-17T10:02:00+02:00",
+    "source": "PVW",
+    "status": "Actual"
+   },
+   "uuid": "732aa63b-23f3-43b8-a1a0-a0db2d8035e9"
+  },
+  {
+   "alert": {
+    "code": [
+     "id:2.49.0.0.276.0.DWD.PVW.1792232460000.c62b8763-a4b4-4a63-8ce9-fbc560a9ecbe",
+     "MCP:v2.0"
+    ],
+    "identifier": "2.49.0.0.276.0.DWD.PVW.1792232460000.c62b8763-a4b4-4a63-8ce9-fbc560a9ecbe.MUL",
+    "incidents": "Alert",
+    "info": [
+     {
+      "area": [
+       {
+        "altitude": 0.0,
+        "areaDesc": "Kreis Stormarn",
+        "ceiling": 9842.5197,
+        "geocode": [
+         {
+          "value": "DE400",
+          "valueName": "EMMA_ID"
+         },
+         {
+          "value": "101062000",
+          "valueName": "WARNCELLID"
+         }
+        ]
+       }
+      ],
+      "category": [
+       "Met"
+      ],
+      "certainty": "Likely",
+      "contact": "Deutscher Wetterdienst",
+      "description": "Es tritt Dauerregen auf. Dabei werden Niederschlagsmengen um 25 l/m² erwartet.",
+      "event": "DAUERREGEN",
+      "eventCode": [
+       {
+        "value": "2.1.14",
+        "valueName": "PROFILE_VERSION"
+       },
+       {
+        "value": "© GeoBasis-DE / BKG 2021 (Daten modifiziert)",
+        "valueName": "LICENSE"
+       },
+       {
+        "value": "63",
+        "valueName": "II"
+       },
+       {
+        "value": "RAIN",
+        "valueName": "GROUP"
+       },
+       {
+        "value": "251 140 0",
+        "valueName": "AREA_COLOR"
+       }
+      ],
+      "expires": "2026-10-18T06:00:00+02:00",
+      "headline": "Amtliche WARNUNG vor DAUERREGEN",
+      "instruction": "Gefahr durch: vereinzelte Überflutungen von Straßen/Unterführungen. \nHandlungsempfehlungen: \nVerhalten im Straßenverkehr anpassen; überflutete Abschnitte meiden",
+      "language": "de-DE",
+      "onset": "2026-10-17T18:00:00+02:00",
+      "parameter": [
+       {
+        "value": "~25 [l/m²]",
+        "valueName": "precipitation"
+       },
+       {
+        "value": "vereinzelte Überflutungen von Straßen/Unterführungen",
+        "valueName": "impacts"
+       },
+       {
+        "value": "3; orange; Severe",
+        "valueName": "awareness_level"
+       },
+       {
+        "value": "10; Rain",
+        "valueName": "awareness_type"
+       }
+      ],
+      "responseType": [
+       "Prepare"
+      ],
+      "senderName": "Deutscher Wetterdienst",
+      "severity": "Moderate",
+      "urgency": "Immediate",
+      "web": "https://dwd.de/warnungen"
+     },
+     {
+      "area": [
+       {
+        "altitude": 0.0,
+        "areaDesc": "Kreis Stormarn",
+        "ceiling": 9842.5197,
+        "geocode": [
+         {
+          "value": "DE400",
+          "valueName": "EMMA_ID"
+         },
+         {
+          "value": "101062000",
+          "valueName": "WARNCELLID"
+         }
+        ]
+       }
+      ],
+      "category": [
+       "Met"
+      ],
+      "certainty": "Likely",
+      "contact": "Deutscher Wetterdienst",
+      "description": "There is a risk of persistent rain (level 2 of 4).\nPrecipitation amounts: ~ 25 l/m²",
+      "event": "persistent rain",
+      "eventCode": [
+       {
+        "value": "2.1.14",
+        "valueName": "PROFILE_VERSION"
+       },
+       {
+        "value": "© GeoBasis-DE / BKG 2021 (Daten modifiziert)",
+        "valueName": "LICENSE"
+       },
+       {
+        "value": "63",
+        "valueName": "II"
+       },
+       {
+        "value": "RAIN",
+        "valueName": "GROUP"
+       },
+       {
+        "value": "251 140 0",
+        "valueName": "AREA_COLOR"
+       }
+      ],
+      "expires": "2026-10-18T06:00:00+02:00",
+      "headline": "Official WARNING of PERSISTANT RAIN",
+      "instruction": "Hazard(s) caused by: isolated flooding of roads and subways. \nRecommendations for what to do: \nAdapt your behaviour in road traffic. Avoid flooded areas.",
+      "language": "en",
+      "onset": "2026-10-17T18:00:00+02:00",
+      "parameter": [
+       {
+        "value": "~25 [l/m²]",
+        "valueName": "precipitation"
+       },
+       {
+        "value": "isolated flooding of roads and subways",
+        "valueName": "impacts"
+       },
+       {
+        "value": "3; orange; Severe",
+        "valueName": "awareness_level"
+       },
+       {
+        "value": "10; Rain",
+        "valueName": "awareness_type"
+       }
+      ],
+      "responseType": [
+       "Prepare"
+      ],
+      "senderName": "Deutscher Wetterdienst",
+      "severity": "Moderate",
+      "urgency": "Immediate",
+      "web": "https://dwd.de/warnungen"
+     }
+    ],
+    "msgType": "Alert",
+    "scope": "Public",
+    "sender": "opendata@dwd.de",
+    "sent": "2026-10-17T12:21:00+02:00",
+    "source": "PVW",
+    "status": "Actual"
+   },
+   "uuid": "0247e36b-229c-42b8-930a-99f112299a42"
+  }
+ ]
+}

@@ -1,7 +1,7 @@
 import pytest
 
 from ww_errors import ACTIONS, WwError
-from ww_model import WMO, weatherkit_condition, wmo_condition
+from ww_model import WMO, Place, Report, weatherkit_condition, wmo_condition
 
 # WeatherKit condition codes that WMO codes map onto
 WEATHERKIT_CODES = [
@@ -28,3 +28,14 @@ def test_every_error_code_has_an_action():
     assert all(ACTIONS.values())
     with pytest.raises(ValueError):
         WwError("not_a_code")
+
+
+def test_place_new_fields_default_to_none():
+    p = Place("x", 1, 2)
+    assert (p.country_code, p.region, p.locality, p.district) == (None, None, None, None)
+
+
+def test_report_has_no_alerts_and_next_hour_defaults_to_none():
+    r = Report("open-meteo", None, [])
+    assert not hasattr(r, "alerts")
+    assert r.next_hour is None

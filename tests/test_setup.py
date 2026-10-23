@@ -1,7 +1,7 @@
 import os
 import stat
 
-from conftest import NOW, TAIPEI_DEFAULT, WEATHERKIT, WK_AVAILABLE_NO_ALERTS, FakeHttp
+from conftest import NOW, TAIPEI_DEFAULT, WEATHERKIT, FakeHttp
 from ww_config import load_config, save_config
 from ww_http import HttpError
 import weatherwise
@@ -9,8 +9,8 @@ import weatherwise
 NOMINATIM = "https://nominatim.openstreetmap.org/"
 OM = "https://api.open-meteo.com/"
 WK = "https://weatherkit.apple.com/"
-WK_AVAIL = "https://weatherkit.apple.com/api/v1/availability"
-TAICHUNG = [{"display_name": "臺中市, 臺灣", "lat": "24.1477", "lon": "120.6736"}]
+TAICHUNG = [{"display_name": "臺中市, 臺灣", "lat": "24.1477", "lon": "120.6736",
+             "address": {"city": "臺中市", "country": "臺灣", "country_code": "tw"}}]
 
 
 def run(argv, http, capsys):
@@ -37,7 +37,8 @@ def test_set_default_saves_and_asks_to_confirm(config_dir, capsys):
     assert out.splitlines()[0] == "saved: default = 臺中市, 臺灣 (24.148, 120.674) timezone=Asia/Taipei"
     assert out.splitlines()[1].startswith("action: confirm with the user")
     assert load_config(config_dir)["default"] == {
-        "name": "臺中市, 臺灣", "lat": 24.1477, "lon": 120.6736, "timezone": "Asia/Taipei"}
+        "name": "臺中市, 臺灣", "lat": 24.1477, "lon": 120.6736, "timezone": "Asia/Taipei",
+        "country_code": "tw", "region": "臺中市", "locality": None, "district": None}
 
 
 def test_set_default_unknown_place_writes_nothing(config_dir, capsys):
@@ -56,7 +57,7 @@ def test_set_lang(config_dir, capsys):
 
 def test_weatherkit_copies_the_key_and_tests_it(config_dir, p8_key, capsys):
     save_config(config_dir, {"default": TAIPEI_DEFAULT})
-    http = FakeHttp({WK_AVAIL: WK_AVAILABLE_NO_ALERTS, WK: WEATHERKIT})
+    http = FakeHttp({WK: WEATHERKIT})
     code, out = run(wk_args(p8_key), http, capsys)
     assert code == 0
     assert out == "saved: weatherkit (test request succeeded)\nsource: weatherkit"
@@ -65,8 +66,15 @@ def test_weatherkit_copies_the_key_and_tests_it(config_dir, p8_key, capsys):
     assert stat.S_IMODE(os.stat(copy).st_mode) == 0o600
     wk = load_config(config_dir)["weatherkit"]
     assert wk == {"team_id": "TEAM123456", "key_id": "ABC123DEF4", "service_id": "dev.example.weather",
-                  "key_path": str(copy), "country_code": "TW"}
-    assert len(http.calls) == 2  # availability + one weather request, nothing more
+                  "key_path": str(copy)}
+    assert len(http.calls) == 1  # one weather request, nothing more
+
+
+def test_weatherkit_setup_no_longer_saves_country_code(config_dir, p8_key, capsys):
+    save_config(config_dir, {"default": TAIPEI_DEFAULT})
+    code, _ = run(wk_args(p8_key), FakeHttp({WK: WEATHERKIT}), capsys)
+    assert code == 0
+    assert "country_code" not in load_config(config_dir)["weatherkit"]
 
 
 def test_weatherkit_rejected_key_saves_nothing(config_dir, p8_key, capsys):
@@ -93,7 +101,7 @@ def test_weatherkit_missing_file(config_dir, tmp_path, capsys):
 
 def test_show_masks_ids_and_never_prints_the_key(config_dir, p8_key, capsys):
     save_config(config_dir, {"default": TAIPEI_DEFAULT})
-    run(wk_args(p8_key), FakeHttp({WK_AVAIL: WK_AVAILABLE_NO_ALERTS, WK: WEATHERKIT}), capsys)
+    run(wk_args(p8_key), FakeHttp({WK: WEATHERKIT}), capsys)
     _, out = run(["show"], FakeHttp({}), capsys)
     assert "source: weatherkit" in out
     assert "TE…56" in out and "TEAM123456" not in out
@@ -102,7 +110,7 @@ def test_show_masks_ids_and_never_prints_the_key(config_dir, p8_key, capsys):
 
 def test_remove_weatherkit(config_dir, p8_key, capsys):
     save_config(config_dir, {"default": TAIPEI_DEFAULT})
-    run(wk_args(p8_key), FakeHttp({WK_AVAIL: WK_AVAILABLE_NO_ALERTS, WK: WEATHERKIT}), capsys)
+    run(wk_args(p8_key), FakeHttp({WK: WEATHERKIT}), capsys)
     code, out = run(["weatherkit", "--remove"], FakeHttp({}), capsys)
     assert (code, out) == (0, "removed: weatherkit\nsource: open-meteo")
     assert "weatherkit" not in load_config(config_dir)
@@ -112,7 +120,7 @@ def test_remove_weatherkit(config_dir, p8_key, capsys):
 
 def saved_weatherkit(config_dir, p8_key, capsys):
     save_config(config_dir, {"default": TAIPEI_DEFAULT})
-    run(wk_args(p8_key), FakeHttp({WK_AVAIL: WK_AVAILABLE_NO_ALERTS, WK: WEATHERKIT}), capsys)
+    run(wk_args(p8_key), FakeHttp({WK: WEATHERKIT}), capsys)
 
 
 def new_key(p8_key):
@@ -124,7 +132,7 @@ def new_key(p8_key):
 def test_new_key_keeps_the_saved_ids(config_dir, p8_key, capsys):
     saved_weatherkit(config_dir, p8_key, capsys)
     code, out = run(["weatherkit", "--key-file", str(new_key(p8_key))],
-                    FakeHttp({WK_AVAIL: WK_AVAILABLE_NO_ALERTS, WK: WEATHERKIT}), capsys)
+                    FakeHttp({WK: WEATHERKIT}), capsys)
     assert code == 0
     assert out.splitlines()[0] == "saved: weatherkit (test request succeeded; kept the saved team_id and service_id)"
     wk = load_config(config_dir)["weatherkit"]
@@ -135,7 +143,7 @@ def test_new_key_keeps_the_saved_ids(config_dir, p8_key, capsys):
 def test_new_key_removes_the_old_copy(config_dir, p8_key, capsys):
     saved_weatherkit(config_dir, p8_key, capsys)
     run(["weatherkit", "--key-file", str(new_key(p8_key))],
-        FakeHttp({WK_AVAIL: WK_AVAILABLE_NO_ALERTS, WK: WEATHERKIT}), capsys)
+        FakeHttp({WK: WEATHERKIT}), capsys)
     assert not (config_dir / "AuthKey_ABC123DEF4.p8").exists()
     assert (config_dir / "AuthKey_NEWKEY5678.p8").exists()
     assert p8_key.exists()  # the user's own download is never touched
@@ -151,7 +159,7 @@ def test_key_only_with_nothing_saved_says_ask_never_guess(config_dir, p8_key, ca
 def test_rejected_key_says_which_ids_were_used_and_not_to_guess(config_dir, p8_key, capsys):
     saved_weatherkit(config_dir, p8_key, capsys)
     code, out = run(["weatherkit", "--key-file", str(new_key(p8_key))],
-                    FakeHttp({WK_AVAIL: WK_AVAILABLE_NO_ALERTS, WK: HttpError(401)}), capsys)
+                    FakeHttp({WK: HttpError(401)}), capsys)
     assert code == 1
     first, action = out.splitlines()
     assert first == ("error: weatherkit_auth_failed (HTTP 401; team_id=TE…56 from saved config, "
@@ -169,7 +177,7 @@ def test_key_copy_is_restrictive_without_relying_on_a_later_chmod(config_dir, p8
     monkeypatch.setattr(os, "chmod", lambda *a, **k: None)
     old = os.umask(0)
     try:
-        run(wk_args(p8_key), FakeHttp({WK_AVAIL: WK_AVAILABLE_NO_ALERTS, WK: WEATHERKIT}), capsys)
+        run(wk_args(p8_key), FakeHttp({WK: WEATHERKIT}), capsys)
     finally:
         os.umask(old)
     copy = config_dir / "AuthKey_ABC123DEF4.p8"
@@ -178,5 +186,23 @@ def test_key_copy_is_restrictive_without_relying_on_a_later_chmod(config_dir, p8
 
 def test_config_dir_is_private(config_dir, p8_key, capsys):
     save_config(config_dir, {"default": TAIPEI_DEFAULT})
-    run(wk_args(p8_key), FakeHttp({WK_AVAIL: WK_AVAILABLE_NO_ALERTS, WK: WEATHERKIT}), capsys)
+    run(wk_args(p8_key), FakeHttp({WK: WEATHERKIT}), capsys)
     assert stat.S_IMODE(os.stat(config_dir).st_mode) == 0o700
+
+
+def test_set_default_message_keeps_only_the_last_script_variant(config_dir):
+    from ww_places import NOMINATIM, NOMINATIM_REVERSE
+    from ww_setup import set_default
+    seoul = {"display_name": "首爾, 韩国 / 南韓", "lat": "37.567", "lon": "126.978",
+             "address": {"city": "首爾", "country": "韩国 / 南韓", "country_code": "kr"}}
+    http = FakeHttp({NOMINATIM: [seoul], NOMINATIM_REVERSE: seoul,
+                     "https://api.open-meteo.com/": {"timezone": "Asia/Seoul"}})
+    out = set_default("首爾", True, {}, config_dir, "zh-TW", http)
+    assert out.splitlines()[0] == "saved: default = 首爾, 南韓 (37.567, 126.978) timezone=Asia/Seoul"
+
+
+def test_weatherkit_probe_passes_the_saved_country_code(config_dir, p8_key, capsys):
+    save_config(config_dir, {"default": TAIPEI_DEFAULT})
+    http = FakeHttp({WK: WEATHERKIT})
+    code, _ = run(wk_args(p8_key), http, capsys)
+    assert code == 0 and "countryCode=TW" in http.calls[0][0]

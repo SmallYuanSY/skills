@@ -1,6 +1,6 @@
 # Setting up Apple WeatherKit (optional)
 
-weatherwise works without this. WeatherKit adds Apple Weather data, and official weather alerts in countries where Apple has them: for example the US, but not Taiwan or Japan (as of 2026-10). Where Apple has no alerts, the output still says `alerts: unsupported`. It needs a paid Apple Developer Program membership (US$99/year), which includes 500,000 WeatherKit calls a month.
+weatherwise works without this. WeatherKit adds Apple Weather data (forecast, and next-hour rain in some countries). Official alerts do not use it and work the same either way. It needs a paid Apple Developer Program membership (US$99/year), which includes 500,000 WeatherKit calls a month.
 
 Guide the user one step at a time. Steps 1–4 happen on Apple's website and only the user can do them.
 

@@ -3,6 +3,7 @@ import sys
 sys.dont_write_bytecode = True  # keep __pycache__ out of src/, which the translator copies
 
 from datetime import datetime, timezone
+from pathlib import Path
 
 import pytest
 from cryptography.hazmat.primitives import serialization
@@ -11,7 +12,8 @@ from cryptography.hazmat.primitives.asymmetric import ec
 # 2026-10-07 12:41 UTC = 2026-10-07 20:41 Wed in Taipei
 NOW = datetime(2026, 10, 7, 12, 41, tzinfo=timezone.utc)
 
-TAIPEI_DEFAULT = {"name": "台北市", "lat": 25.033, "lon": 121.565, "timezone": "Asia/Taipei"}
+TAIPEI_DEFAULT = {"name": "台北市", "lat": 25.033, "lon": 121.565, "timezone": "Asia/Taipei",
+                  "country_code": "tw"}
 
 OPEN_METEO = {
     "timezone": "Asia/Taipei",
@@ -42,10 +44,36 @@ WEATHERKIT = {
     "weatherAlerts": {"alerts": []},
 }
 
-# WeatherKit's availability endpoint: which data sets Apple has for a place.
-# Real responses (2026-10-07): Taiwan and Japan have no weatherAlerts; the US does.
-WK_AVAILABLE_NO_ALERTS = ["currentWeather", "forecastDaily", "forecastHourly"]
-WK_AVAILABLE_WITH_ALERTS = ["currentWeather", "forecastDaily", "forecastHourly", "weatherAlerts"]
+# forecastNextHour as WeatherKit returns it: summary segments (startTime/endTime, condition,
+# precipitationIntensity in mm/h) plus per-minute data. Query time is 20:41 in Tokyo (11:41Z).
+def _next_hour(summary, peak=None):
+    return {"forecastNextHour": {
+        "forecastStart": "2026-10-07T11:41:00Z", "forecastEnd": "2026-10-07T12:41:00Z",
+        "summary": summary,
+        "minutes": [{"startTime": "2026-10-07T11:41:00Z", "precipitationIntensity": peak or 0.0}],
+    }}
+
+
+NEXT_HOUR_RAIN_AT_2105 = _next_hour([  # 2026-10-07T12:05Z = 21:05 Tokyo
+    {"startTime": "2026-10-07T11:41:00Z", "endTime": "2026-10-07T12:05:00Z", "condition": "clear",
+     "precipitationChance": 0.0, "precipitationIntensity": 0.0},
+    {"startTime": "2026-10-07T12:05:00Z", "condition": "rain",
+     "precipitationChance": 0.8, "precipitationIntensity": 1.2},
+])
+NEXT_HOUR_CLEAR = _next_hour([
+    {"startTime": "2026-10-07T11:41:00Z", "condition": "clear", "precipitationChance": 0.0,
+     "precipitationIntensity": 0.0},
+])
+NEXT_HOUR_HEAVY_NOW_STOPPING_2140 = _next_hour([  # 12:40Z = 21:40 Tokyo
+    {"startTime": "2026-10-07T11:41:00Z", "endTime": "2026-10-07T12:40:00Z", "condition": "rain",
+     "precipitationChance": 1.0, "precipitationIntensity": 6.5},
+    {"startTime": "2026-10-07T12:40:00Z", "condition": "clear", "precipitationChance": 0.0,
+     "precipitationIntensity": 0.0},
+], peak=6.5)
+NEXT_HOUR_RAIN_WHOLE_HOUR = _next_hour([
+    {"startTime": "2026-10-07T11:41:00Z", "condition": "rain", "precipitationChance": 0.9,
+     "precipitationIntensity": 1.0},
+])
 
 
 class FakeHttp:
@@ -56,7 +84,7 @@ class FakeHttp:
         self.routes = routes
         self.calls: list[tuple[str, dict | None]] = []
 
-    def __call__(self, url: str, headers: dict | None = None):
+    def __call__(self, url: str, headers: dict | None = None, *, text: bool = False):
         self.calls.append((url, headers))
         for prefix, resp in self.routes.items():
             if url.startswith(prefix):
@@ -84,3 +112,25 @@ def p8_key(tmp_path):
     path.parent.mkdir()
     path.write_bytes(pem)
     return path
+
+
+FIXTURES = Path(__file__).parent / "fixtures" / "alerts"
+
+
+def fixture(name: str) -> str:
+    return (FIXTURES / name).read_text(encoding="utf-8")
+
+
+@pytest.fixture(autouse=True)
+def cache_dir(tmp_path, monkeypatch):
+    """Keep tests away from the real cache."""
+    d = tmp_path / "cache"
+    monkeypatch.setenv("WEATHERWISE_CACHE_DIR", str(d))
+    return d
+
+
+@pytest.fixture(autouse=True)
+def no_nominatim_pause(request, monkeypatch):
+    """The 1.1 s pauses between Nominatim requests are for the real service."""
+    if "live" not in request.keywords:
+        monkeypatch.setattr("time.sleep", lambda s: None)
