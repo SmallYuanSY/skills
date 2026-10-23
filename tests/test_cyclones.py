@@ -110,14 +110,29 @@ def test_garbage_geometry_is_not_cached(tmp_path):
     assert any(u.startswith(GEO + "1001338") for u, _ in good.calls) and c.track
 
 
-def test_unreadable_geometry_far_from_centroid_is_not_reported():
+def test_unreadable_geometry_lists_the_storm_for_every_place_within_fetch_km():
+    """R24: without geometry there is no track to judge by, so the storm must not silently disappear."""
     h = FakeHttp({ww_cyclones.LIST_URL: json.loads(fixture("gdacs_list.json")),
-                  GEO + "1001338": RuntimeError("boom")})
-    hanoi = Place("河內", 21.03, 105.85, "Asia/Bangkok", "vn")  # ~2000 km: clearly fetched, clearly beyond NEAR_KM
+                  GEO + "1001338": RuntimeError("timeout")})
+    hanoi = Place("河內", 21.03, 105.85, "Asia/Bangkok", "vn")
     km = ww_geo.distance_km(hanoi.lat, hanoi.lon, 21.2, 124.9)
-    assert ww_cyclones.NEAR_KM + 500 < km < ww_cyclones.FETCH_KM - 500
-    assert ww_cyclones.nearby([hanoi], h, GDACS_NOW) == []
-    assert any(u.startswith(GEO + "1001338") for u, _ in h.calls)  # the geometry was tried
+    assert ww_cyclones.NEAR_KM < km < ww_cyclones.FETCH_KM
+    (c, idx), = ww_cyclones.nearby([hanoi, BERLIN], h, GDACS_NOW)
+    assert c.name == "CHAMPI-26" and idx == [0]  # Berlin is beyond FETCH_KM
+    text = ww_cyclones.describe(c, hanoi)
+    assert text.startswith("CHAMPI-26 (GDACS Red): now ~") and text.endswith("forecast track unavailable")
+
+
+def test_rejected_geometry_body_also_lists_the_storm_within_fetch_km():
+    h = FakeHttp({ww_cyclones.LIST_URL: json.loads(fixture("gdacs_list.json")),
+                  GEO + "1001338": {"error": "busy"}})
+    hanoi = Place("河內", 21.03, 105.85, "Asia/Bangkok", "vn")
+    assert names(ww_cyclones.nearby([hanoi], h, GDACS_NOW)) == {"CHAMPI-26": [0]}
+
+
+def test_readable_geometry_still_uses_near_km():
+    hanoi = Place("河內", 21.03, 105.85, "Asia/Bangkok", "vn")  # ~2000 km, track never within 800 km
+    assert ww_cyclones.nearby([hanoi], http(), GDACS_NOW) == []
 
 
 def test_malformed_list_entry_skips_only_that_entry():

@@ -125,6 +125,7 @@ Alert(kind, severity, title, areas, summary, onset, expires, source, key)
 - 符合任一條件就提醒：
   - 地點落在任何一個預測暴風範圍多邊形內；或
   - 目前位置或預測路徑上任一點，距離地點 800 km 以內。
+  - geometry 抓不到（逾時、錯誤、被拒）時沒有路徑可判斷：目前位置在 3500 km 以內就列出，寫 `forecast track unavailable`，不可以默默漏掉。*（R24）*
 - 輸出一行：名稱、GDACS 等級、目前距離和方位、預測路徑最接近的距離。**GDACS 沒有預測時間**，只有當地官方資料提供時間時（例如 NCDR 颱風摘要裡的預測位置和時刻），才寫出最接近的時間。
 - **同一顆颱風只列一次**，合併規則適用於所有來源（NCDR、JMA、HKO、NWS、ECCC、MeteoAlarm），在共用的步驟處理，不寫在個別 provider 裡：
   - 如果當地警報的 title 或 summary 裡出現 GDACS 名稱去掉年份後的部分（例如 `CHAMPI-26` → `CHAMPI`，不分大小寫），就視為同一顆。實測 NCDR 的摘要裡有「國際命名 CHAMPI」。

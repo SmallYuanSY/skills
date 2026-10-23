@@ -72,16 +72,18 @@ def _affects(c: Cyclone, place: Place) -> bool:
     return ww_geo.distance_to_path_km(place.lat, place.lon, path) <= NEAR_KM
 
 
-def _cyclone(feature: dict, start: tuple[float, float], http) -> Cyclone:
+def _cyclone(feature: dict, start: tuple[float, float], http) -> tuple[Cyclone, bool]:
+    """The storm, and whether its geometry (track, wind polygons) could be read."""
     props = feature["properties"]
     sev = props.get("severitydata", {}).get("severitytext", "")
     try:
         geo = fetch_checked(http, props["url"]["geometry"], lambda b: (features(b), b)[1])
         centroid, track, polygons = _parse_geometry(geo, start)
-    except Exception:  # keep a possibly close storm, judged by the list's position alone
-        centroid, track, polygons = start, [], []
+        ok = True
+    except Exception:  # keep the storm, placed by the list's position alone
+        centroid, track, polygons, ok = start, [], [], False
     return Cyclone(props["eventname"], props.get("alertlevel", ""), centroid[0], centroid[1],
-                   track, polygons, sev)
+                   track, polygons, sev), ok
 
 
 def nearby(places: list[Place], http, now: datetime) -> list[tuple[Cyclone, list[int]]]:
@@ -93,10 +95,13 @@ def nearby(places: list[Place], http, now: datetime) -> list[tuple[Cyclone, list
             start = _latlon(feature["geometry"]["coordinates"])
             if all(ww_geo.distance_km(p.lat, p.lon, *start) > FETCH_KM for p in places):
                 continue
-            cyclone = _cyclone(feature, start, http)
+            cyclone, geometry_ok = _cyclone(feature, start, http)
         except (KeyError, IndexError, TypeError, ValueError, AttributeError):  # malformed entry
             continue
-        indices = [i for i, p in enumerate(places) if _affects(cyclone, p)]
+        if geometry_ok:
+            indices = [i for i, p in enumerate(places) if _affects(cyclone, p)]
+        else:  # R24: no track to judge by, so never drop it silently; shown as "forecast track unavailable"
+            indices = [i for i, p in enumerate(places) if ww_geo.distance_km(p.lat, p.lon, *start) <= FETCH_KM]
         if indices:
             found.append((cyclone, indices))
     return found

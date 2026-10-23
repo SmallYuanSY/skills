@@ -123,3 +123,16 @@ def test_204_no_content_is_nothing_not_a_broken_body(monkeypatch):
     monkeypatch.setattr(ww_http.urllib.request, "urlopen", lambda req, timeout: _NoContent(b""))
     assert ww_http.get("https://example.com/") is None
     assert ww_http.get("https://example.com/", text=True) == ""
+
+
+@pytest.mark.parametrize("url,timeout", [
+    ("https://www.gdacs.org/gdacsapi/api/events/geteventlist/SEARCH?eventlist=TC", 30),
+    ("https://www.gdacs.org/gdacsapi/api/polygons/getgeometry?eventtype=TC&eventid=1", 30),
+    ("https://alerts.ncdr.nat.gov.tw/RssAtomFeed.ashx", 15),
+    ("https://nominatim.openstreetmap.org/search?q=x", 15),
+])
+def test_gdacs_gets_a_longer_timeout(monkeypatch, url, timeout):
+    seen = []
+    monkeypatch.setattr(ww_http.urllib.request, "urlopen", lambda req, timeout: seen.append(timeout) or io.BytesIO(b"{}"))
+    ww_http.get(url)
+    assert seen == [timeout]

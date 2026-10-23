@@ -8,6 +8,8 @@ from ww_errors import WwError
 VERSION = "2.0.0"
 REPO = "https://github.com/SmallYuanSY/skills"
 USER_AGENT = f"weatherwise/{VERSION} (+{REPO})"
+TIMEOUT = 15  # seconds
+SLOW = {"https://www.gdacs.org": 30}  # GDACS geometry has taken ~14 s
 
 
 class HttpError(Exception):
@@ -20,7 +22,8 @@ class HttpError(Exception):
 def get(url: str, headers: dict | None = None, *, text: bool = False):
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, **(headers or {})})
     try:
-        with urllib.request.urlopen(req, timeout=15) as r:
+        timeout = next((t for prefix, t in SLOW.items() if url.startswith(prefix)), TIMEOUT)
+        with urllib.request.urlopen(req, timeout=timeout) as r:
             body = r.read()
             status = getattr(r, "status", 200)
     except urllib.error.HTTPError as e:  # subclass of URLError, so it must come first
