@@ -325,3 +325,28 @@ def test_hong_kong_is_hk_not_mainland_china():
 def test_osaka_ward_keeps_the_city_for_jma_matching():
     p = geocode("大阪市北区", "ja", True, FakeHttp({NOMINATIM: [OSAKA_KITA], NOMINATIM_REVERSE: OSAKA_KITA}))
     assert (p.country_code, p.region, p.locality, p.district) == ("jp", "大阪府", "北区", "大阪市")
+
+
+# Real Nominatim search answer with accept-language=zh-TW (2026-10-23): a town in a 郡, the prefecture
+# in simplified characters, which JMA's area table never matches.
+YAKUSHIMA_ZH = {"class": "boundary", "type": "administrative", "lat": "30.3580", "lon": "130.5280",
+                "display_name": "屋久岛町, 熊毛郡, 鹿儿岛县, 日本",
+                "address": {"town": "屋久岛町", "county": "熊毛郡", "province": "鹿儿岛县", "ISO3166-2-lvl4": "JP-46",
+                            "country": "日本", "country_code": "jp"}}
+
+
+def test_japan_prefecture_comes_from_the_iso_code():
+    p = geocode("屋久島町", "zh-TW", True, FakeHttp({NOMINATIM: [YAKUSHIMA_ZH], NOMINATIM_REVERSE: HttpError(429)}))
+    assert (p.region, p.district) == ("鹿児島県", "熊毛郡")
+
+
+def test_japan_town_in_a_gun_without_a_province_is_not_filed_under_the_gun():
+    no_province = {**YAKUSHIMA_ZH, "address": {k: v for k, v in YAKUSHIMA_ZH["address"].items() if k != "province"}}
+    p = geocode("屋久島町", "zh-TW", True, FakeHttp({NOMINATIM: [no_province], NOMINATIM_REVERSE: HttpError(429)}))
+    assert p.region == "鹿児島県"  # would otherwise be 熊毛郡
+
+
+def test_japan_without_an_iso_code_keeps_the_old_logic():
+    old = {**YAKUSHIMA_ZH, "address": {k: v for k, v in YAKUSHIMA_ZH["address"].items() if k != "ISO3166-2-lvl4"}}
+    p = geocode("屋久島町", "zh-TW", True, FakeHttp({NOMINATIM: [old], NOMINATIM_REVERSE: HttpError(429)}))
+    assert p.region == "鹿儿岛县"

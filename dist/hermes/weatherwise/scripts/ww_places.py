@@ -4,6 +4,7 @@ import time
 import urllib.parse
 from dataclasses import replace
 
+from ww_alerts_jp import PREFECTURES
 from ww_errors import WwError
 from ww_http import HttpError
 from ww_model import Place
@@ -16,6 +17,7 @@ CJK = re.compile(r"[\u3400-\u9fff]")
 ADMIN_SUFFIXES = ("區", "鄉", "鎮", "市", "縣")
 OPEN_METEO = "https://api.open-meteo.com/v1/forecast"
 SAR = {"CN-HK": "hk", "CN-MO": "mo"}
+JP_CODE = re.compile(r"JP-(\d\d)")
 COORDS = re.compile(r"^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$")
 
 
@@ -145,7 +147,8 @@ def _address_fields(r: dict) -> dict:
     if cc == "cn":  # Nominatim files Hong Kong and Macau under China, with the SAR as ISO3166-2-lvl3
         cc = SAR.get(addr.get("ISO3166-2-lvl3"), cc)
     keys = ("city", "county", "state", "province") if cc == "tw" else ("state", "province", "county")
-    region = next((addr[k] for k in keys if addr.get(k)), None)
+    region = _japan_by_code(addr) if cc == "jp" else None
+    region = region or next((addr[k] for k in keys if addr.get(k)), None)
     if not region and cc == "jp":
         region = _japan_prefecture(r, addr)
     if not region and cc != "tw":
@@ -155,6 +158,13 @@ def _address_fields(r: dict) -> dict:
     # County-level area (German Kreis) for matching county-based warning feeds; Taiwan's county is the region
     district = None if cc == "tw" else (addr.get("county") or addr.get("city"))
     return {"country_code": cc, "region": region, "locality": locality, "district": district}
+
+
+def _japan_by_code(addr: dict) -> str | None:
+    """JP-27 -> 大阪府. The code is language-independent: a town in a 郡 may have no prefecture in the
+    address (the 郡 would become the region) or have it in simplified characters (鹿儿岛县)."""
+    m = JP_CODE.fullmatch(addr.get("ISO3166-2-lvl4") or "")
+    return PREFECTURES[int(m[1]) - 1] if m and 1 <= int(m[1]) <= len(PREFECTURES) else None
 
 
 def _japan_prefecture(r: dict, addr: dict) -> str | None:
