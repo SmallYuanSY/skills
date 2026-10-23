@@ -4,6 +4,17 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 SEVERITY_ORDER = ["extreme", "severe", "moderate", "minor"]
+VARIANTS = re.compile(r" / |;")
+
+
+def one_variant(label: str) -> str:
+    """Nominatim's zh labels may list several script variants in one part ("德国;德國", "韩国 / 南韓");
+    keep the last (zh-Hant in observed data), part by part. "Biel/Bienne" has no spaces and is kept."""
+    out = []
+    for part in label.split(", "):
+        variants = [v.strip() for v in VARIANTS.split(part) if v.strip()]
+        out.append(variants[-1] if variants else part)
+    return ", ".join(out)
 
 
 @dataclass

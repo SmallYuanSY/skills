@@ -5,7 +5,7 @@ from pathlib import Path
 from ww_config import KEY_FILE_NAME, ensure_private_dir, mask, resolve_lang, save_config, weatherkit_settings
 from ww_errors import WwError
 from ww_http import HttpError
-from ww_model import Place
+from ww_model import Place, one_variant
 from ww_places import localize, resolve_place, reverse, with_timezone
 from ww_sources import fetch_weatherkit
 
@@ -17,7 +17,7 @@ def show(cfg: dict, d: Path) -> str:
     lines = [f"config: {d / 'config.json'}", f"lang: {resolve_lang(None, cfg)}"]
     df = cfg.get("default")
     lines.append(
-        f"default: {df['name']} ({df['lat']:.3f}, {df['lon']:.3f}) timezone={df.get('timezone')}"
+        f"default: {one_variant(df['name'])} ({df['lat']:.3f}, {df['lon']:.3f}) timezone={df.get('timezone')}"
         if df else "default: none"
     )
     try:
@@ -43,7 +43,7 @@ def set_default(query: str, global_search: bool, cfg: dict, d: Path, lang: str, 
                       "district": place.district}
     save_config(d, cfg)
     return (
-        f"saved: default = {place.name} ({place.lat:.3f}, {place.lon:.3f}) timezone={place.timezone}\n"
+        f"saved: default = {one_variant(place.name)} ({place.lat:.3f}, {place.lon:.3f}) timezone={place.timezone}\n"
         "action: confirm with the user that this is the right place"
     )
 

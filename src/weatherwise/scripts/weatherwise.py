@@ -161,9 +161,11 @@ def run_weather(argv: list[str], http, now: datetime | None) -> str:
     cyclones = [(c, [ok[j] for j in idx]) for c, idx in cyclones]  # back to positions in the request
     entries = [(resolved[i][0], reports[i], alerts[i]) for i in range(len(resolved))]
 
+    as_of = _alerts_as_of(cached, now)
     if a.json:
-        return json.dumps(render_json(entries, cyclones, notice, a.places or [None], cyclone_error), ensure_ascii=False, indent=2)
-    return render(entries, cyclones, now, _alerts_as_of(cached, now), days, notice, a.detail, cyclone_error)
+        return json.dumps(render_json(entries, cyclones, notice, a.places or [None], cyclone_error, as_of),
+                          ensure_ascii=False, indent=2)
+    return render(entries, cyclones, now, as_of, days, notice, a.detail, cyclone_error)
 
 
 def run_config(argv: list[str], http, now: datetime | None) -> str:

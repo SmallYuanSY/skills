@@ -265,3 +265,27 @@ def test_gdacs_failure_is_shown_as_unavailable_not_as_no_cyclone():
     assert out.splitlines()[-1] == ("cyclones: unavailable (gdacs HTTP 503; "
                                     "do not tell the user there is no tropical cyclone)")
     assert "cyclones" not in go([(BANQIAO, report(), NONE_OK)])
+
+
+# Real Nominatim zh labels (2026-10): several script variants in one component; the last is zh-Hant.
+def test_label_keeps_only_the_last_script_variant():
+    berlin = Place("柏林, 德国;德國", 52.52, 13.405, "Europe/Berlin", "de", "Berlin", "Mitte")
+    assert "location: Mitte, Berlin, 德國 (52.520, 13.405)" in go([(berlin, report(), NONE_OK)])
+    seoul = Place("首爾, 韩国 / 南韓", 37.567, 126.978, "Asia/Seoul", "kr")
+    assert "location: 首爾, 南韓 (37.567, 126.978)" in go([(seoul, report(), NONE_OK)])
+    concord = Place("康科德, 新罕布什尔州 / 新罕布夏州 / 新罕布什爾州, 美國", 43.2, -71.54, "America/New_York", "us",
+                    "新罕布什尔州 / 新罕布夏州 / 新罕布什爾州", "康科德")
+    assert "location: 康科德, 新罕布什爾州, 美國 (43.200, -71.540)" in go([(concord, report(), NONE_OK)])
+    multi = go([(concord, report(), NONE_OK), (seoul, report(), NONE_OK)])
+    assert "[1] 康科德, 新罕布什爾州" in multi and "[2] 首爾, 南韓" in multi and "/" not in multi
+
+
+def test_json_location_keeps_only_the_last_script_variant():
+    from ww_render import render_json
+    seoul = Place("首爾, 韩国 / 南韓", 37.567, 126.978, "Asia/Seoul", "kr")
+    assert render_json([(seoul, report(), NONE_OK)], [], None)["places"][0]["location"] == "首爾, 南韓"
+
+
+def test_a_slash_inside_a_name_is_not_a_variant_separator():
+    biel = Place("Biel/Bienne, Schweiz/Suisse/Svizzera/Svizra", 47.14, 7.25, "Europe/Zurich", "ch")
+    assert "location: Biel/Bienne, Schweiz/Suisse/Svizzera/Svizra (" in go([(biel, report(), NONE_OK)])

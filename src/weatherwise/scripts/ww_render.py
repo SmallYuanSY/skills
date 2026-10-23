@@ -5,7 +5,7 @@ from zoneinfo import ZoneInfo
 import ww_cyclones
 from ww_alerts import CAP
 from ww_errors import ACTIONS, WwError
-from ww_model import SEVERITY_ORDER, Alert, Cyclone, Place, PlaceAlerts, Report
+from ww_model import SEVERITY_ORDER, Alert, Cyclone, Place, PlaceAlerts, Report, one_variant
 
 # Weekday names come from here, not strftime("%a"), which follows the machine's locale
 WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
@@ -61,11 +61,12 @@ def _label(place: Place, country: bool = False) -> str:
     """Short place name: locality, region (and the country on the location line), else the full name."""
     parts = []
     for p in (place.locality, place.region):
-        if p and p not in parts:
-            parts.append(p)
+        if p and one_variant(p) not in parts:
+            parts.append(one_variant(p))
+    name = one_variant(place.name)
     if not parts:
-        return place.name
-    tail = place.name.rsplit(", ", 1)[-1] if ", " in place.name else None
+        return name
+    tail = name.rsplit(", ", 1)[-1] if ", " in name else None
     if country and tail and tail not in parts:
         parts.append(tail)
     return ", ".join(parts)
@@ -222,20 +223,26 @@ def _cyclone_json(c: Cyclone) -> dict:
 
 
 def render_json(entries: list[Entry], cyclones: list[tuple[Cyclone, list[int]]], notice: str | None,
-                queries: list[str | None] | None = None, cyclone_error: str | None = None) -> dict:
+                queries: list[str | None] | None = None, cyclone_error: str | None = None,
+                fetched_at: datetime | None = None) -> dict:
+    """fetched_at is the alerts' as-of time, given in the first place's timezone like the text header."""
     places = []
     for n, (place, report, pa) in enumerate(entries):
         if isinstance(report, WwError):
-            item = {"location": place.name if place else None,
+            item = {"location": one_variant(place.name) if place else None,
                     "error": {"code": report.code, "detail": report.detail, "action": ACTIONS[report.code]}}
         else:
-            item = {"location": place.name, "source": report.source, "forecast": report.raw}
+            item = {"location": one_variant(place.name), "source": report.source, "forecast": report.raw}
         item = {"query": queries[n] if queries else None, **item}
         if pa is not None:
             item["alerts"] = {"status": pa.status, "reason": pa.reason, "items": [_alert_json(a) for a in pa.alerts]}
         places.append(item)
-    out = {"places": places,
-           "cyclones": [{**_cyclone_json(c), "places": [i + 1 for i in idx]} for c, idx in cyclones]}
+    out: dict = {}
+    if fetched_at is not None:
+        first = next((e[0] for e in entries if e[0] is not None), None)
+        out["alerts_as_of"] = (_local(fetched_at, first) if first else fetched_at).isoformat(timespec="seconds")
+    out["places"] = places
+    out["cyclones"] = [{**_cyclone_json(c), "places": [i + 1 for i in idx]} for c, idx in cyclones]
     if cyclone_error:
         out["cyclones_unavailable"] = cyclone_error
     if notice:

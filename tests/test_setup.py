@@ -188,3 +188,14 @@ def test_config_dir_is_private(config_dir, p8_key, capsys):
     save_config(config_dir, {"default": TAIPEI_DEFAULT})
     run(wk_args(p8_key), FakeHttp({WK: WEATHERKIT}), capsys)
     assert stat.S_IMODE(os.stat(config_dir).st_mode) == 0o700
+
+
+def test_set_default_message_keeps_only_the_last_script_variant(config_dir):
+    from ww_places import NOMINATIM, NOMINATIM_REVERSE
+    from ww_setup import set_default
+    seoul = {"display_name": "首爾, 韩国 / 南韓", "lat": "37.567", "lon": "126.978",
+             "address": {"city": "首爾", "country": "韩国 / 南韓", "country_code": "kr"}}
+    http = FakeHttp({NOMINATIM: [seoul], NOMINATIM_REVERSE: seoul,
+                     "https://api.open-meteo.com/": {"timezone": "Asia/Seoul"}})
+    out = set_default("首爾", True, {}, config_dir, "zh-TW", http)
+    assert out.splitlines()[0] == "saved: default = 首爾, 南韓 (37.567, 126.978) timezone=Asia/Seoul"

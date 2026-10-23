@@ -285,3 +285,12 @@ def test_official_typhoon_alert_with_failed_geometry_has_no_gdacs_text(config_di
     line = next(ln for ln in out.splitlines() if "颱風警報" in ln)
     assert "GDACS" not in line and "forecast" not in line and "CHAMPI" not in line
     assert "cyclones (" not in out and "forecast closest" not in out
+
+
+def test_json_has_alerts_as_of_like_the_text_header(config_dir, capsys):
+    _, out = run(["板橋", "--json"], world(), capsys)
+    assert json.loads(out)["alerts_as_of"] == "2026-10-07T20:41:00+08:00"
+    weatherwise.main(["板橋"], http=world(), now=NOW.replace(minute=30))  # seeds the alert cache
+    capsys.readouterr()
+    weatherwise.main(["板橋", "--json"], http=world(), now=NOW.replace(minute=40))
+    assert json.loads(capsys.readouterr().out)["alerts_as_of"] == "2026-10-07T20:30:00+08:00"
