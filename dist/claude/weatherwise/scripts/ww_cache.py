@@ -79,7 +79,7 @@ class Cached:
                 self.last_good[key] = hit
         body = self.http(url, headers, text=text)
         self.memo[key] = body
-        if ttl:
+        if ttl and body not in (None, ""):  # an empty answer (HTTP 204) is for this run only
             self._write(path, text, body)
         return body
 

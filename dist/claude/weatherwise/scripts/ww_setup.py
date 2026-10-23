@@ -6,7 +6,7 @@ from ww_config import KEY_FILE_NAME, ensure_private_dir, mask, resolve_lang, sav
 from ww_errors import WwError
 from ww_http import HttpError
 from ww_model import Place, one_variant
-from ww_places import localize, paced, resolve_place, reverse, with_timezone
+from ww_places import local_names, localize, paced, resolve_place, reverse, with_timezone
 from ww_sources import fetch_weatherkit
 
 # Where the WeatherKit test request asks for weather when no default place is set
@@ -50,19 +50,19 @@ def set_default(query: str, global_search: bool, cfg: dict, d: Path, lang: str, 
 
 def ensure_default_complete(cfg: dict, d: Path, lang: str, http) -> None:
     """Defaults saved before country codes existed get one reverse lookup, written back for good. One
-    abroad saved before local names existed (a country but no district) gets the local-name lookup."""
+    abroad saved before local names existed (no district key) gets the local-name lookup once; a place
+    that has no district gets "" so the lookup is not repeated. Only a failed lookup is retried."""
     df = cfg.get("default")
     if not df:
         return
     http = paced(http)  # the reverse and the localize below are two Nominatim requests
     cc = df.get("country_code")
     if cc:
-        if cc == "tw" or df.get("district"):
+        if cc == "tw" or df.get("district") is not None:
             return
-        place = localize(Place(df["name"], df["lat"], df["lon"], df.get("timezone"), cc, df.get("region"),
-                               df.get("locality"), df.get("district")), http)
-        if place.district:  # a failed lookup changes nothing; try again next run
-            df.update(region=place.region, locality=place.locality, district=place.district)
+        local = local_names(Place(df["name"], df["lat"], df["lon"], df.get("timezone"), cc), http)
+        if local is not None:  # a failed lookup changes nothing; try again next run
+            df.update(region=local.region, locality=local.locality, district=local.district or "")
             save_config(d, cfg)
         return
     try:

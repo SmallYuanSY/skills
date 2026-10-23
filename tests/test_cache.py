@@ -172,3 +172,15 @@ def test_relative_xdg_cache_home_is_ignored(monkeypatch, tmp_path):
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setenv("XDG_CACHE_HOME", "relative/cache")  # the XDG spec says to ignore relative paths
     assert cache_dir() == tmp_path / ".cache" / "weatherwise"
+
+
+@pytest.mark.parametrize("body,text", [(None, False), ("", True)])
+def test_an_empty_body_is_kept_for_the_run_but_never_written(tmp_path, body, text):
+    url = "https://nominatim.openstreetmap.org/search?q=x"
+    http = FakeHttp({url: lambda u: body})
+    c = Cached(http, 1000, tmp_path)
+    assert c(url, text=text) == body and c(url, text=text) == body
+    assert len(http.calls) == 1  # memo for the run
+    assert list(tmp_path.iterdir()) == []
+    Cached(http, 1001, tmp_path)(url, text=text)
+    assert len(http.calls) == 2

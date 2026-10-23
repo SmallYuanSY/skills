@@ -64,7 +64,7 @@ def resolve_place(query: str | None, cfg: dict, lang: str, global_search: bool, 
             raise WwError("no_default_location")
         # A default without a country is completed by ensure_default_complete, not here (one reverse per run)
         return Place(d["name"], float(d["lat"]), float(d["lon"]), d.get("timezone"),
-                     d.get("country_code"), d.get("region"), d.get("locality"), d.get("district"))
+                     d.get("country_code"), d.get("region"), d.get("locality"), d.get("district") or None)
     m = COORDS.match(query)
     if m:
         lat, lon = float(m[1]), float(m[2])
@@ -78,15 +78,20 @@ def localize(place: Place, http) -> Place:
     """Alert feeds match region/locality/district by name, in the local language (MeteoAlarm "Berlin",
     JMA 千代田区), so places outside Taiwan get those three fields from a reverse lookup without
     accept-language. The name stays in the user's language. A failed lookup keeps what we have."""
-    http = paced(http)
     if not place.country_code or place.country_code == "tw":
         return place
+    return local_names(place, http) or place
+
+
+def local_names(place: Place, http) -> Place | None:
+    """localize's lookup: the place with local region/locality/district, or None when it failed."""
+    http = paced(http)
     try:
         local = reverse(place.lat, place.lon, None, http)
     except WwError:
-        return place
+        return None
     if local.country_code != place.country_code:
-        return place
+        return None
     return replace(place, region=local.region, locality=local.locality, district=local.district)
 
 

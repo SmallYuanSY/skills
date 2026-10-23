@@ -377,3 +377,26 @@ def test_default_abroad_with_a_country_but_no_district_is_localized_once(config_
 def test_taiwan_default_without_a_district_is_left_alone(config_dir):
     cfg = {"default": {**TAIPEI_DEFAULT, "region": "臺北市"}}
     ensure_default_complete(cfg, config_dir, "zh-TW", FakeHttp({}))  # any request would fail the test
+
+
+def test_default_whose_local_lookup_has_no_district_is_marked_and_not_retried(config_dir):
+    cfg = {"default": {"name": "x", "lat": 52.5, "lon": 13.37, "timezone": "Europe/Berlin",
+                       "country_code": "de", "region": "柏林"}}
+    no_district = {**BERLIN_LOCAL, "address": {"suburb": "Tiergarten", "state": "Berlin", "country_code": "de"}}
+    http = FakeHttp({NOMINATIM_REVERSE: no_district})
+    ensure_default_complete(cfg, config_dir, "zh-TW", http)
+    saved = load_config(config_dir)["default"]  # load_config also checks the shape accepts ""
+    assert (saved["region"], saved["locality"], saved["district"]) == ("Berlin", "Tiergarten", "")
+    ensure_default_complete(load_config(config_dir), config_dir, "zh-TW", http)
+    assert len(http.calls) == 1
+    assert resolve_place(None, load_config(config_dir), "zh-TW", False, FakeHttp({})).district is None
+
+
+def test_default_whose_local_lookup_failed_is_retried_next_run(config_dir):
+    cfg = {"default": {"name": "x", "lat": 52.5, "lon": 13.37, "timezone": "Europe/Berlin",
+                       "country_code": "de", "region": "柏林"}}
+    ensure_default_complete(cfg, config_dir, "zh-TW", FakeHttp({NOMINATIM_REVERSE: HttpError(429)}))
+    assert "district" not in cfg["default"]
+    http = FakeHttp({NOMINATIM_REVERSE: BERLIN_LOCAL})
+    ensure_default_complete(cfg, config_dir, "zh-TW", http)
+    assert cfg["default"]["district"] == "Berlin" and len(http.calls) == 1
