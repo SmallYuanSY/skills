@@ -21,3 +21,20 @@ def test_distance_to_forecast_path():
 def test_point_in_polygon():
     square = [(0, 0), (0, 10), (10, 10), (10, 0), (0, 0)]
     assert point_in_polygon(5, 5, square) and not point_in_polygon(15, 5, square)
+
+
+def test_point_in_polygon_across_the_antimeridian():
+    ring = [(10, 179), (10, -179), (20, -179), (20, 179)]
+    assert point_in_polygon(15, 179.5, ring) and point_in_polygon(15, -179.5, ring)
+    assert not point_in_polygon(15, 178.5, ring) and not point_in_polygon(15, -178.5, ring)
+    assert not point_in_polygon(15, 0, ring)
+
+
+def test_point_in_polygon_ray_through_a_vertex():
+    diamond = [(0, 5), (5, 10), (10, 5), (5, 0)]  # the ray at lat 5 passes exactly through two vertices
+    assert point_in_polygon(5, 5, diamond)
+    assert not point_in_polygon(5, -1, diamond) and not point_in_polygon(5, 11, diamond)
+
+
+def test_distance_to_a_one_point_path_is_the_distance_to_that_point():
+    assert abs(distance_to_path_km(25.033, 121.565, [(21.2, 125.0)]) - distance_km(25.033, 121.565, 21.2, 125.0)) < 15

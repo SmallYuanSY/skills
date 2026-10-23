@@ -46,7 +46,15 @@ def distance_to_path_km(lat: float, lon: float, path: list[tuple[float, float]])
 
 
 def point_in_polygon(lat: float, lon: float, ring: list[tuple[float, float]]) -> bool:
-    """Ray casting; ring is a (lat, lon) sequence."""
+    """Ray casting; ring is a (lat, lon) sequence. Longitudes are unwrapped first (the first vertex near
+    the point, each next one within 180° of the previous), so a ring crossing the antimeridian
+    (179°E -> 179°W) stays one small shape instead of spanning the globe."""
+    unwrapped: list[tuple[float, float]] = []
+    prev = lon
+    for plat, plon in ring:
+        prev = prev + _wrap_lon(plon - prev)
+        unwrapped.append((plat, prev))
+    ring = unwrapped
     inside = False
     for (lat1, lon1), (lat2, lon2) in zip(ring, ring[1:] + ring[:1]):
         if (lat1 > lat) != (lat2 > lat):
