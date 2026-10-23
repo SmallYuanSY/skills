@@ -10,6 +10,7 @@ import pytest
 
 import weatherwise
 from conftest import OPEN_METEO, WEATHERKIT
+from ww_errors import WwError
 from ww_http import get
 from ww_model import Place
 from ww_places import geocode, reverse, with_timezone
@@ -157,10 +158,21 @@ def test_ncdr_feed_still_has_the_fields_we_parse():
     assert all((e.findtext(f"{ww_alerts_tw.CAP}status") or "").strip() for e in entries)
 
 
+def gdacs_get(url: str):
+    """GDACS can take over a minute on a cold request (R25 keeps the 30 s timeout): a timeout skips,
+    any other failure (HTTP error, not JSON, wrong shape) still fails."""
+    try:
+        return get(url)
+    except WwError as e:
+        if e.code == "network_error" and "timed out" in (e.detail or "").lower():
+            pytest.skip(f"GDACS timed out: {e.detail}")
+        raise
+
+
 def test_gdacs_list_and_geometry_shape():
     import ww_cyclones
 
-    features = get(ww_cyclones.LIST_URL)["features"]
+    features = gdacs_get(ww_cyclones.LIST_URL)["features"]
     assert features
     for f in features:
         p = f["properties"]
@@ -170,7 +182,7 @@ def test_gdacs_list_and_geometry_shape():
         assert -90 <= lat <= 90 and -180 <= lon <= 180
         assert p["url"]["geometry"].startswith("https://www.gdacs.org/")
     current = next((f for f in features if f["properties"]["iscurrent"] == "true"), features[0])
-    geo = get(current["properties"]["url"]["geometry"])
+    geo = gdacs_get(current["properties"]["url"]["geometry"])
     classes = {g["properties"].get("Class") for g in geo["features"]}
     assert "Point_Centroid" in classes and "Poly_Green" in classes
     assert any(g["geometry"]["type"] == "LineString" and "forecast" in g["properties"] for g in geo["features"])
