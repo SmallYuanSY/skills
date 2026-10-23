@@ -49,11 +49,22 @@ def set_default(query: str, global_search: bool, cfg: dict, d: Path, lang: str, 
 
 
 def ensure_default_complete(cfg: dict, d: Path, lang: str, http) -> None:
-    """Defaults saved before country codes existed get one reverse lookup, written back for good."""
+    """Defaults saved before country codes existed get one reverse lookup, written back for good. One
+    abroad saved before local names existed (a country but no district) gets the local-name lookup."""
     df = cfg.get("default")
-    if not df or df.get("country_code"):
+    if not df:
         return
     http = paced(http)  # the reverse and the localize below are two Nominatim requests
+    cc = df.get("country_code")
+    if cc:
+        if cc == "tw" or df.get("district"):
+            return
+        place = localize(Place(df["name"], df["lat"], df["lon"], df.get("timezone"), cc, df.get("region"),
+                               df.get("locality"), df.get("district")), http)
+        if place.district:  # a failed lookup changes nothing; try again next run
+            df.update(region=place.region, locality=place.locality, district=place.district)
+            save_config(d, cfg)
+        return
     try:
         found = reverse(df["lat"], df["lon"], lang, http)
     except WwError:

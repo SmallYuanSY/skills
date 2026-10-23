@@ -360,3 +360,20 @@ def test_a_bare_fetcher_still_gets_one_pause_between_live_nominatim_requests(mon
     http = FakeHttp({NOMINATIM: lambda u: [] if "countrycodes" in u else [berlin], NOMINATIM_REVERSE: berlin})
     geocode("Berlin", "de", False, http)
     assert len(http.calls) == 3 and len(sleeps) == 2  # Taiwan, worldwide, reverse for local names
+
+
+def test_default_abroad_with_a_country_but_no_district_is_localized_once(config_dir):
+    cfg = {"default": {"name": "柏林", "lat": 52.5, "lon": 13.37, "timezone": "Europe/Berlin",
+                       "country_code": "de", "region": "柏林", "locality": "Tiergarten"}}
+    http = FakeHttp({NOMINATIM_REVERSE: BERLIN_LOCAL})
+    ensure_default_complete(cfg, config_dir, "zh-TW", http)
+    saved = load_config(config_dir)["default"]
+    assert (saved["region"], saved["district"], saved["name"]) == ("Berlin", "Berlin", "柏林")
+    assert len(http.calls) == 1 and "accept-language" not in http.calls[0][0]
+    ensure_default_complete(load_config(config_dir), config_dir, "zh-TW", http)
+    assert len(http.calls) == 1  # complete now: no further lookup
+
+
+def test_taiwan_default_without_a_district_is_left_alone(config_dir):
+    cfg = {"default": {**TAIPEI_DEFAULT, "region": "臺北市"}}
+    ensure_default_complete(cfg, config_dir, "zh-TW", FakeHttp({}))  # any request would fail the test

@@ -199,3 +199,10 @@ def test_set_default_message_keeps_only_the_last_script_variant(config_dir):
                      "https://api.open-meteo.com/": {"timezone": "Asia/Seoul"}})
     out = set_default("首爾", True, {}, config_dir, "zh-TW", http)
     assert out.splitlines()[0] == "saved: default = 首爾, 南韓 (37.567, 126.978) timezone=Asia/Seoul"
+
+
+def test_weatherkit_probe_passes_the_saved_country_code(config_dir, p8_key, capsys):
+    save_config(config_dir, {"default": TAIPEI_DEFAULT})
+    http = FakeHttp({WK: WEATHERKIT})
+    code, _ = run(wk_args(p8_key), http, capsys)
+    assert code == 0 and "countryCode=TW" in http.calls[0][0]
