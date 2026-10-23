@@ -170,3 +170,30 @@ def test_collect_dedupes_two_versions_of_one_key(monkeypatch):
     monkeypatch.setitem(ww_alerts.PROVIDERS, "tw", lambda p, h, n: [versions])
     res, _, _ = ww_alerts.collect([BANQIAO], None, NOW)
     assert [a.title for a in res[0].alerts] == ["new"]
+
+
+FAR = Cyclone("FUNGWONG-26", "Green", 12.0, 140.0, [], [], "")  # ~2600 km from 板橋, CHAMPI ~550 km
+
+
+def test_an_alert_naming_two_storms_merges_only_the_nearest(monkeypatch):
+    ty = alert("ty", kind="typhoon", detail="CHAMPI ... FUNGWONG")
+    monkeypatch.setitem(ww_alerts.PROVIDERS, "tw", lambda p, h, n: [[ty]])
+    for order in ([CHAMPI, FAR], [FAR, CHAMPI]):
+        ty.cyclone = None
+        monkeypatch.setattr(ww_cyclones, "nearby", lambda p, h, n, order=order: [(c, [0]) for c in order])
+        res, cyclones, _ = ww_alerts.collect([BANQIAO], None, NOW)
+        assert res[0].alerts[0].cyclone is CHAMPI
+        assert cyclones == [(FAR, [0])]  # the other storm stays on its own line (R23)
+
+
+def test_same_severity_alerts_list_the_newest_first(monkeypatch):
+    same = [alert("a", "minor", updated=1), alert("b", "minor", updated=9), alert("c", "severe", updated=0)]
+    monkeypatch.setitem(ww_alerts.PROVIDERS, "tw", lambda p, h, n: [same])
+    res, _, _ = ww_alerts.collect([BANQIAO], None, NOW)
+    assert [a.key for a in res[0].alerts] == ["c", "b", "a"]
+
+
+def test_provider_returning_the_wrong_number_of_results_is_unavailable(monkeypatch):
+    monkeypatch.setitem(ww_alerts.PROVIDERS, "tw", lambda p, h, n: [[alert("a")]])
+    res, _, _ = ww_alerts.collect([BANQIAO, PINGLIN], None, NOW)
+    assert [(r.status, r.reason) for r in res] == [("unavailable", "ValueError")] * 2

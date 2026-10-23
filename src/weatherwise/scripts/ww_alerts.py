@@ -12,6 +12,7 @@ import ww_alerts_tw
 import ww_alerts_us
 import ww_cyclones
 from ww_errors import WwError
+from ww_geo import distance_km
 from ww_http import HttpError
 from ww_model import SEVERITY_ORDER, Alert, Cyclone, Place, PlaceAlerts
 
@@ -49,7 +50,9 @@ def _clean(alerts: list[Alert], now: datetime) -> list[Alert]:
         if old is None or _stamp(a) > _stamp(old):
             newest[a.key] = a
     rank = {s: i for i, s in enumerate(SEVERITY_ORDER)}
-    return sorted(newest.values(), key=lambda a: rank.get(a.severity, len(rank)))
+    # within one severity, the newest first; sorted() keeps the provider's order for full ties
+    by_new = sorted(newest.values(), key=_stamp, reverse=True)
+    return sorted(by_new, key=lambda a: rank.get(a.severity, len(rank)))
 
 
 def _stamp(a: Alert):
@@ -95,18 +98,19 @@ def collect(places: list[Place], http, now: datetime) -> Collected:
     except Exception as e:  # GDACS failing must not change any place's status, but must not read as "no cyclone"
         found, cyclone_error = [], _reason("gdacs", e)
 
-    standalone = []
-    for cyclone, indices in found:
-        name = _local_name(cyclone).lower()
-        left = []
-        for i in indices:
-            merged = False
-            for a in results[i].alerts:
-                if name and a.kind == "typhoon" and name in f"{a.title} {a.detail}".lower():
-                    a.cyclone = cyclone
-                    merged = True
-            if not merged:
-                left.append(i)
-        if left:
-            standalone.append((cyclone, left))
+    # A typhoon alert carries at most one storm: of those it names, the one nearest the place. Any other
+    # storm it names stays standalone for that place, so it is never lost.
+    merged: set[tuple[int, int]] = set()  # (storm index in found, place index)
+    for i, place in enumerate(places):
+        near = [(k, c) for k, (c, indices) in enumerate(found) if i in indices]
+        for a in results[i].alerts:
+            if a.kind != "typhoon":
+                continue
+            text = f"{a.title} {a.detail}".lower()
+            named = [(k, c) for k, c in near if (n := _local_name(c).lower()) and n in text]
+            if named:
+                k, a.cyclone = min(named, key=lambda kc: distance_km(place.lat, place.lon, kc[1].lat, kc[1].lon))
+                merged.add((k, i))
+    standalone = [(c, left) for k, (c, indices) in enumerate(found)
+                  if (left := [i for i in indices if (k, i) not in merged])]
     return Collected(results, standalone, cyclone_error)
