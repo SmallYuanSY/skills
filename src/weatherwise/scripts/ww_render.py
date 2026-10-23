@@ -194,9 +194,15 @@ def render(entries: list[Entry], cyclones: list[tuple[Cyclone, list[int]]], now:
     # Official OR GDACS, never both: a storm already carried by a place's official alert is not repeated.
     # (only alerts actually listed count: one cut by the cap must not hide the storm)
     shown = _shown_keys(entries, detail)
-    covered = {(a.cyclone.name, i) for i, (_, _, pa) in enumerate(entries) if pa
-               for a in pa.alerts if a.cyclone is not None and a.key in shown}
-    standalone = [(c, left) for c, indices in cyclones
+    carried = [(a.cyclone, i, a.key in shown) for i, (_, _, pa) in enumerate(entries) if pa
+               for a in pa.alerts if a.cyclone is not None]
+    covered = {(c.name, i) for c, i, listed in carried if listed}
+    # collect() hands over only storms no alert carries; a carrier cut by the cap gives its storm back
+    by_name = {c.name: (c, list(indices)) for c, indices in cyclones}
+    for c, i, listed in carried:
+        if not listed and i not in by_name.setdefault(c.name, (c, []))[1]:
+            by_name[c.name][1].append(i)
+    standalone = [(c, sorted(left)) for c, indices in by_name.values()
                   if (left := [i for i in indices if (c.name, i) not in covered])]
     if standalone:
         lines.append("cyclones (track data, not a local official warning):")

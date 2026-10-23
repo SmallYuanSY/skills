@@ -197,3 +197,20 @@ def test_provider_returning_the_wrong_number_of_results_is_unavailable(monkeypat
     monkeypatch.setitem(ww_alerts.PROVIDERS, "tw", lambda p, h, n: [[alert("a")]])
     res, _, _ = ww_alerts.collect([BANQIAO, PINGLIN], None, NOW)
     assert [(r.status, r.reason) for r in res] == [("unavailable", "ValueError")] * 2
+
+
+def test_storm_of_a_capped_out_typhoon_alert_still_reaches_the_output(monkeypatch):
+    """End to end (collect -> render): the alert carrying the storm is cut by the cap, so the storm
+    must still get its own line (R23: official OR GDACS, and here no official line is shown)."""
+    from ww_model import Current, PlaceAlerts, Report
+    from ww_render import render
+
+    many = [alert(f"k{n}", "extreme", title=f"超大豪雨{n}") for n in range(ww_alerts.CAP)]
+    ty = alert("ty", "severe", kind="typhoon", title="颱風警報", detail="CHAMPI")
+    monkeypatch.setitem(ww_alerts.PROVIDERS, "tw", lambda p, h, n: [many + [ty]])
+    monkeypatch.setattr(ww_cyclones, "nearby", lambda p, h, n: [(CHAMPI, [0])])
+    got = ww_alerts.collect([BANQIAO], None, NOW)
+    report = Report("open-meteo", Current("Rain", 23.0, 25.0, 90, 10.0, 1.0), [])
+    out = render([(BANQIAO, report, got.places[0])], got.cyclones, NOW, NOW, 1, None, False)
+    assert "颱風警報" not in out and "+1 more" in out
+    assert "CHAMPI-26 (GDACS Orange)" in out
