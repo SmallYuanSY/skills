@@ -22,6 +22,7 @@ def get(url: str, headers: dict | None = None, *, text: bool = False):
     try:
         with urllib.request.urlopen(req, timeout=15) as r:
             body = r.read()
+            status = getattr(r, "status", 200)
     except urllib.error.HTTPError as e:  # subclass of URLError, so it must come first
         try:
             detail = e.read().decode(errors="replace")[:300]
@@ -30,6 +31,8 @@ def get(url: str, headers: dict | None = None, *, text: bool = False):
         raise HttpError(e.code, detail) from None
     except (urllib.error.URLError, TimeoutError, OSError) as e:
         raise WwError("network_error", str(e)) from None
+    if status == 204:  # No Content (GDACS when there is no event): nothing, not a broken body
+        return "" if text else None
     if text:
         return body.decode(errors="replace")
     try:

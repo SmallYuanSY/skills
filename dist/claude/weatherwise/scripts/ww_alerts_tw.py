@@ -160,6 +160,8 @@ def _root(body: str) -> ET.Element:
     root = ET.fromstring(body)
     if root.tag == "WarningMessage" or root.find(".//WarningMessage") is not None:
         raise WwError("service_error", "ncdr rate limited")
+    if root.tag != ATOM + "feed":  # any other XML (an error document) has no entries but is not "none"
+        raise ValueError("not an Atom feed")
     return root
 
 

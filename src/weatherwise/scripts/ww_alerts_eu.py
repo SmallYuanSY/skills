@@ -121,9 +121,9 @@ def _alert(w: dict) -> tuple[Alert, list[dict]]:
 
 
 def _warnings(body) -> list:
-    if not isinstance(body, dict) or not isinstance(body.get("warnings", []), list):
-        raise ValueError("not a warning feed")
-    return body.get("warnings", [])
+    if not isinstance(body, dict) or not isinstance(body.get("warnings"), list):
+        raise ValueError("not a warning feed")  # an error object must not read as "no warnings"
+    return body["warnings"]
 
 
 def alerts_for(places: list[Place], http, now: datetime) -> list[list[Alert] | None]:

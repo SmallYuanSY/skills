@@ -142,10 +142,11 @@ class Cached:
 
 
 def features(body) -> list:
-    """The feature list of a GeoJSON-like response; anything else is a rejected body."""
-    if not isinstance(body, dict) or not isinstance(body.get("features", []), list):
+    """The feature list of a GeoJSON-like response; anything else is a rejected body. A missing list is
+    rejected too: an error object served with HTTP 200 ({"error": ...}) must not read as "no alerts"."""
+    if not isinstance(body, dict) or not isinstance(body.get("features"), list):
         raise ValueError("not a feature collection")
-    return body.get("features", [])
+    return body["features"]
 
 
 def fetch_checked(http, url: str, check, *, text: bool = False):

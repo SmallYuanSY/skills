@@ -187,3 +187,10 @@ def test_tokyo_alone_gets_champi_whose_track_passes_close():
     tokyo = Place("東京", 35.68, 139.69, "Asia/Tokyo", "jp", "東京都", "千代田区")
     assert ww_geo.distance_km(tokyo.lat, tokyo.lon, 21.2, 124.9) > 2000  # beyond the old fetch radius
     assert "CHAMPI-26" in names(ww_cyclones.nearby([tokyo], http(), GDACS_NOW))
+
+
+def test_gdacs_no_content_means_no_cyclone_not_unavailable():
+    # GDACS answers 204 No Content when no event matches (probed 2026-10-23); ww_http turns that into None
+    h = FakeHttp({ww_cyclones.LIST_URL: lambda u: None, ww_alerts_tw.FEED: fixture("ncdr.xml")})
+    got = ww_alerts.collect([TAIPEI], h, GDACS_NOW)
+    assert (got.cyclones, got.cyclone_error) == ([], None)

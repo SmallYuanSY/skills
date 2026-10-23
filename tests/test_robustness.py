@@ -113,3 +113,13 @@ def test_text_mode_returns_the_decoded_body(monkeypatch):
     body = "<feed>颱風</feed>".encode()
     monkeypatch.setattr(ww_http.urllib.request, "urlopen", lambda req, timeout: io.BytesIO(body))
     assert ww_http.get("https://example.com/", text=True) == "<feed>颱風</feed>"
+
+
+class _NoContent(io.BytesIO):
+    status = 204
+
+
+def test_204_no_content_is_nothing_not_a_broken_body(monkeypatch):
+    monkeypatch.setattr(ww_http.urllib.request, "urlopen", lambda req, timeout: _NoContent(b""))
+    assert ww_http.get("https://example.com/") is None
+    assert ww_http.get("https://example.com/", text=True) == ""

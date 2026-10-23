@@ -1,4 +1,5 @@
 """Hong Kong alerts from the HKO open-data warning summary; one request serves every Hong Kong place."""
+import re
 from datetime import datetime, timedelta, timezone
 
 from ww_cache import fetch_checked
@@ -7,6 +8,7 @@ from ww_model import Alert, Place
 URL = "https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=warnsum&lang=tc"
 LIMIT = 60
 HKT = timezone(timedelta(hours=8))
+WARNING_KEY = re.compile(r"W[A-Z0-9]+")  # every warning-summary key: WRAIN, WTCSGNL, WFIRE, ...
 
 # warning-summary key -> kind; anything else is still listed as "other"
 KINDS = {
@@ -41,7 +43,10 @@ def _alerts(data: dict) -> list[Alert]:
 
 
 def _summary(body) -> dict:
-    if not isinstance(body, dict):
+    """{} is the real "no warnings"; anything else must look like warning entries ("WRAIN": {...}),
+    so an error object served with HTTP 200 is rejected rather than read as none."""
+    if not isinstance(body, dict) or not all(
+            isinstance(k, str) and WARNING_KEY.fullmatch(k) and isinstance(v, dict) for k, v in body.items()):
         raise ValueError("not a warning summary")
     return body
 

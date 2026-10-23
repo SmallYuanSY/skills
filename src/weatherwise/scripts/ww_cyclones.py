@@ -47,6 +47,12 @@ def _parse_geometry(geo: dict, start: tuple[float, float]):
     return centroid, _chain(segments, centroid), polygons
 
 
+def _events(body) -> list:
+    """GDACS answers 204 No Content (body None) when there is no event at all; anything else must be a
+    feature collection."""
+    return [] if body is None else features(body)
+
+
 def _recent(props: dict, now: datetime) -> bool:
     if props.get("iscurrent") != "true":
         return False
@@ -79,7 +85,7 @@ def _cyclone(feature: dict, http) -> Cyclone:
 
 def nearby(places: list[Place], http, now: datetime) -> list[tuple[Cyclone, list[int]]]:
     found = []
-    for feature in fetch_checked(http, LIST_URL, features):
+    for feature in fetch_checked(http, LIST_URL, _events):
         try:
             if not _recent(feature["properties"], now):
                 continue
